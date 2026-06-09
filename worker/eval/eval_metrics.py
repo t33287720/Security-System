@@ -32,8 +32,8 @@ from sklearn.metrics import matthews_corrcoef
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config.settings import load_config
 
-# __file__ = /app/api/eval/eval_metrics.py → go up 3 levels to /app, then data/eval/output
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'eval', 'output')
+# __file__ = /app/eval/eval_metrics.py → go up 2 levels to /app, then data/eval/output
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'eval', 'output')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 

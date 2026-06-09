@@ -13,9 +13,9 @@ import json
 import os
 from datetime import datetime
 
-OUTPUT_DIR    = os.path.join(os.path.dirname(__file__), 'output')
+OUTPUT_DIR    = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'eval', 'output')
 SNAPSHOT_CSV  = os.path.join(OUTPUT_DIR, 'daily_snapshots.csv')
-TUNING_CONFIG = os.path.join(os.path.dirname(__file__), 'tuning_config.json')
+TUNING_CONFIG = os.path.join(OUTPUT_DIR, 'tuning_config.json')
 LOG_PATH      = os.path.join(OUTPUT_DIR, 'auto_tuning.log')
 
 # 調整上下限

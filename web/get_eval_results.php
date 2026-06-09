@@ -62,7 +62,7 @@ $report      = file_exists($report_path)
                : null;
 
 // ── 讀取 tuning_config.json（自動調整參數 + 趨勢）
-$tuning_path   = __DIR__ . '/api/eval/tuning_config.json';
+$tuning_path   = __DIR__ . '/api/eval/output/tuning_config.json';
 $tuning_config = file_exists($tuning_path)
                ? json_decode(file_get_contents($tuning_path), true)
                : null;
