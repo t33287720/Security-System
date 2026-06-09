@@ -3,15 +3,14 @@
 config/security_hosts.json
 config/security_config.json
 
+# ── DB dumps (contain real data, store in /var/opt/Security-System/) ──
+config/mysql/*_dump.sql
+
 # ── Generated / runtime data ──────────────────────────────────
-api/data/
-api/__pycache__/
-api/**/__pycache__/
-api/**/*.pyc
-api/**/*.cpython-*.pyc
+worker/data/
 
 # ── Old archived scripts ──────────────────────────────────────
-api/elk_api_old*.py
+worker/elk_api_old*.py
 
 # ── Dev / test helpers ────────────────────────────────────────
 api_check/

@@ -1,120 +1,27 @@
 services:
 
-  # ── Elasticsearch ────────────────────────────────────────────
-  elasticsearch:
-    image: elasticsearch:8.13.4
-    container_name: gaisec-es
-    environment:
-      - ELASTIC_PASSWORD=${ES_PASS}
-      - discovery.type=single-node
-      - xpack.security.enabled=true
-      - xpack.security.http.ssl.enabled=false
-      - xpack.security.transport.ssl.enabled=false
-      # heap min=max 避免 JVM 動態調整停頓；container limit = heap × 2（ES 會用 OS 頁面快取）
-      - ES_JAVA_OPTS=-Xms${ES_HEAP:-4g} -Xmx${ES_HEAP:-4g}
-    mem_limit: ${ES_MEM_LIMIT:-8g}
-    ports:
-      - "127.0.0.1:9200:9200"   # only localhost; security-worker (host network) uses this
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
-    networks:
-      - gaisec
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s -u elastic:${ES_PASS} http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\\|yellow\"'"]
-      interval: 30s
-      retries: 10
-
-  # ── Kibana ───────────────────────────────────────────────────
-  kibana:
-    image: kibana:8.13.4
-    container_name: gaisec-kibana
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - ELASTICSEARCH_USERNAME=elastic
-      - ELASTICSEARCH_PASSWORD=${ES_PASS}
-    mem_limit: 1g
-    ports:
-      - "${KIBANA_PORT:-5601}:5601"
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    networks:
-      - gaisec
-    restart: unless-stopped
-
-  # ── Logstash ─────────────────────────────────────────────────
-  logstash:
-    image: logstash:8.13.4
-    container_name: gaisec-logstash
-    environment:
-      - XPACK_MONITORING_ENABLED=false
-      - ES_PASS=${ES_PASS}
-      - LS_JAVA_OPTS=-Xms${LS_HEAP:-512m} -Xmx${LS_HEAP:-512m}
-    mem_limit: 1g
-    volumes:
-      - ./config/logstash/pipeline:/usr/share/logstash/pipeline:ro
-    ports:
-      - "5044:5044"             # Filebeat → Logstash (must be reachable from host Filebeat)
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    networks:
-      - gaisec
-    restart: unless-stopped
-
-  # ── Filebeat ─────────────────────────────────────────────────
-  filebeat:
-    image: elastic/filebeat:8.13.4
-    container_name: gaisec-filebeat
-    user: root
-    mem_limit: 256m
-    volumes:
-      - ./config/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-      - /var/log/zeek:/var/log/zeek:ro   # reads Zeek logs from host
-    depends_on:
-      - logstash
-    networks:
-      - gaisec
-    restart: unless-stopped
-
-  # ── MySQL ────────────────────────────────────────────────────
-  mysql:
-    image: mysql:8.0
-    container_name: gaisec-mysql
-    environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - MYSQL_DATABASE=CCT_Security
-    mem_limit: 2g
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-    ports:
-      - "127.0.0.1:3306:3306"  # only localhost; security-worker (host network) uses this
-    networks:
-      - gaisec
-    restart: unless-stopped
-
   # ── Security Worker (Python) ──────────────────────────────────
   # network_mode:host + privileged so ipset/iptables work on the host kernel
-  security-worker:
+  worker:
     build:
-      context: ./api
+      context: ./worker
       dockerfile: Dockerfile
-    container_name: gaisec-worker
-    network_mode: host            # accesses ES/MySQL via localhost ports above
+    container_name: security-system-worker
+    network_mode: host            # accesses ES/MariaDB via localhost
     privileged: true              # required for ipset / iptables
     mem_limit: 512m
     environment:
-      - ES_HOST=http://localhost:9200
+      - PYTHONUNBUFFERED=1
+      - ES_HOST=${ES_HOST_WORKER}
       - ES_USER=elastic
       - ES_PASS=${ES_PASS}
       - MYSQL_HOST=127.0.0.1
       - MYSQL_PORT=3306
-      - MYSQL_USER=root
-      - MYSQL_PASS=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASS=${MYSQL_PASS}
       - MYSQL_DB=CCT_Security
       - OLLAMA_URL=${OLLAMA_URL}
+      - EMBED_URL=${EMBED_URL:-}
       - MANUAL_IPS=${MANUAL_IPS:-}
       - IPSET_NAME=${IPSET_NAME:-blacklistv4}
       - IPSET_FULL_NAME=${IPSET_FULL_NAME:-blackfulllistv4}
@@ -122,37 +29,35 @@ services:
       - HOSTS_JSON_PATH=/app/config/security_hosts.json
     volumes:
       - ./config/security_hosts.json:/app/config/security_hosts.json:ro
-      - ./api/data:/app/data           # blacklist cache persists across restarts
+      - /var/opt/Security-System/data:/app/data
     restart: unless-stopped
 
   # ── PHP Web ──────────────────────────────────────────────────
   web:
     build:
-      context: .
-      dockerfile: Dockerfile.web
-    container_name: gaisec-web
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: security-system-web
     mem_limit: 512m
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 讓容器可以連回主機的 MariaDB / ES
     environment:
-      - MYSQL_HOST=mysql
+      - MYSQL_HOST=host.docker.internal
       - MYSQL_PORT=3306
-      - MYSQL_USER=root
-      - MYSQL_PASS=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASS=${MYSQL_PASS}
       - MYSQL_DB=CCT_Security
-      - ES_HOST=http://elasticsearch:9200
+      - ES_HOST=${ES_HOST_WEB}
       - ES_USER=elastic
       - ES_PASS=${ES_PASS}
     ports:
       - "${WEB_PORT:-80}:80"
-    depends_on:
-      - mysql
+    volumes:
+      - /var/opt/Security-System/data/eval/output:/var/www/html/GAIsecurity/api/eval/output:ro
     networks:
-      - gaisec
+      - security-system
     restart: unless-stopped
 
-volumes:
-  es_data:
-  mysql_data:
-
 networks:
-  gaisec:
+  security-system:
     driver: bridge

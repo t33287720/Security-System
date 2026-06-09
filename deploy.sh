@@ -188,6 +188,5 @@ HOST_IP=$(hostname -I | awk '{print $1}')
 echo ""
 echo -e "${GREEN}✓ Deployment complete!${NC}"
 echo "  Web dashboard : http://${HOST_IP}:${WEB_PORT:-80}"
-echo "  Kibana        : http://${HOST_IP}:${KIBANA_PORT:-5601}"
 echo ""
-echo "  Logs: docker compose logs -f security-worker"
+echo "  Logs: docker compose logs -f worker"
