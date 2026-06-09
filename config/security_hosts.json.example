@@ -1,0 +1,15 @@
+[
+  {
+    "name": "local",
+    "ip": "127.0.0.1",
+    "enabled": true
+  },
+  {
+    "name": "remote-server",
+    "ip": "192.168.1.100",
+    "port": 22,
+    "user": "admin",
+    "ssh_key": "/root/.ssh/id_rsa",
+    "enabled": false
+  }
+]

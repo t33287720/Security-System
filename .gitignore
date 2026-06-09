@@ -1,0 +1,29 @@
+# ── Secrets (never commit) ────────────────────────────────────
+.env
+config/security_hosts.json
+config/security_config.json
+
+# ── Generated / runtime data ──────────────────────────────────
+api/data/
+api/__pycache__/
+api/**/__pycache__/
+api/**/*.pyc
+api/**/*.cpython-*.pyc
+
+# ── Old archived scripts ──────────────────────────────────────
+api/elk_api_old*.py
+
+# ── Dev / test helpers ────────────────────────────────────────
+api_check/
+test.php
+
+# ── Python cache ──────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ── OS / editor ───────────────────────────────────────────────
+.DS_Store
+*.swp
+*.swo

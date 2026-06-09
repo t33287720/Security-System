@@ -1,0 +1,13 @@
+{
+  "fn_limit": 5,
+  "fp_limit": 2,
+  "last_updated": "2026-06-09",
+  "mcc_trend": "improving",
+  "recall_trend": "stable",
+  "last_mcc": 0.6529,
+  "last_recall": 0.9185,
+  "note": "MCC/Recall 改善，fn_limit↓5",
+  "last_action": "MCC/Recall 改善，fn_limit↓5",
+  "pre_action_mcc": 0.6529,
+  "pre_action_recall": 0.9185
+}

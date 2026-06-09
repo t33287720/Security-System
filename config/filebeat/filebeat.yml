@@ -1,0 +1,22 @@
+filebeat.modules:
+  - module: zeek
+    connection:
+      enabled: true
+      var.paths:
+        - /var/log/zeek/current/conn.log
+        - /var/log/zeek/conn.*.log.gz
+
+# Also ship system/auth logs
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/auth.log
+      - /var/log/syslog
+    fields:
+      log_source: syslog
+
+output.logstash:
+  hosts: ["logstash:5044"]
+
+logging.level: warning

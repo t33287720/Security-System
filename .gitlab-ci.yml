@@ -1,0 +1,9 @@
+stages:       # 定義階段
+  - dummy
+
+skip_all:
+  stage: dummy
+  script:
+    - echo "This CI is skipped"
+  rules:
+    - when: never   # 永遠不跑
