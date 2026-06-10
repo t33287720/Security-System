@@ -6,41 +6,66 @@
 
 ## 系統架構
 
-```
-網路流量
-   │
-   ▼
-[Zeek]  ──── 擷取連線 log ────►  /var/log/zeek/
-  (host systemctl)                      │
-                                        ▼
-                                  [Filebeat]
-                                  (host systemctl)
-                                        │
-                                        ▼
-                                  [Logstash]
-                                  (host systemctl)
-                                        │
-                                        ▼
-                               [Elasticsearch]
-                               (host systemctl)
-                                        │
-                         ┌─────────────┘
-                         ▼
-                  [worker]  ◄── 輪詢新 log
-                 (Docker)
-                    │    │
-                    │    └──► [Ollama LLM]  分析威脅
-                    │         (host / 遠端 GPU)
-                    │
-                    ├──► [MariaDB]  儲存 IP 風險狀態
-                    │    (host systemctl)
-                    │
-                    └──► [ipset/iptables]  封鎖惡意 IP
-                          (host kernel)
+### 整體流程
 
-[web]  ◄── 查詢 MariaDB / ES ──► 儀表板、審核、白名單管理
-(Docker)
+```mermaid
+flowchart TD
+    Net([網路流量]) --> Zeek["Zeek<br/>(host systemctl)"]
+    Zeek -->|擷取連線 log| ZeekLog["/var/log/zeek/"]
+    ZeekLog --> Filebeat["Filebeat<br/>(host systemctl)"]
+    Filebeat --> Logstash["Logstash<br/>(host systemctl)"]
+    Logstash --> ES[("Elasticsearch<br/>(host systemctl)")]
+    ES -->|輪詢新 log| Worker["worker<br/>(Docker)"]
+    Worker -->|分析威脅| Ollama["Ollama LLM<br/>(host / 遠端 GPU)"]
+    Worker -->|讀寫 IP 風險狀態| DB[("MariaDB<br/>(host systemctl)")]
+    Worker -->|同步封鎖規則| Fw["ipset / iptables<br/>(host kernel，含遠端主機 SSH)"]
+    Web["web<br/>(Docker)"] -->|查詢/管理風險狀態與白名單| DB
+    Web -->|查詢原始 log| ES
+    User([管理人員]) -->|儀表板 / 審核 / 白名單管理| Web
 ```
+
+### worker 處理流程
+
+worker 是常駐迴圈（每 `POLL_INTERVAL` 秒一輪），每輪依序執行：
+
+```mermaid
+flowchart TD
+    A([Loop 開始]) --> B["① 同步 ipset/iptables<br/>(依 MariaDB 風險狀態，<br/>含本機與遠端主機 SSH)"]
+    B --> C["心跳 / 每日更新公開黑名單<br/>cleanup_blacklist 清理過期紀錄"]
+    C --> D["② 向 Elasticsearch<br/>查詢新 log"]
+    D --> E{有新 log?}
+    E -- 否 --> Z["Sleep POLL_INTERVAL"] --> A
+    E -- 是 --> F["依來源 IP 分組"]
+
+    F --> G{"IP 是否在<br/>MariaDB 黑/白名單?"}
+    G -- "已封鎖黑名單" --> G1["略過<br/>(EVAL模式：命中公開黑名單仍跑LLM驗證)"]
+    G -- 白名單 --> G2["暫存供 benign eval"]
+    G -- 否 --> H["寫入 syslog/zeeklog 至 MariaDB<br/>更新 IP 活動時間"]
+
+    H --> I{命中公開威脅情報黑名單?}
+    I -- 是 --> I1["寫入風險紀錄並跳過<br/>(EVAL模式：並行跑LLM驗證)"]
+    I -- 否 --> J{"24h log數 ≥ 5<br/>且未在 5 分鐘冷卻?"}
+    J -- 否 --> NextIP["下一個 IP"]
+    J -- 是 --> K["③ 呼叫 Ollama LLM<br/>analyze_message 分析行為"]
+
+    K --> L{"confidence < 0.7<br/>且 24h log ≥ 20?"}
+    L -- 是 --> M["擴大筆數重新分析"]
+    L -- 否 --> N
+    M --> N["④ save_analysis_result<br/>依風險等級決定處置"]
+
+    N --> O["更新 MariaDB ip_risk_status<br/>黑名單 / LLM黑名單 / 觀察名單"]
+    O --> P{危險且為新攻擊手法?}
+    P -- 是 --> Q["寫入待審核攻擊手法<br/>(供人工於 web 核准)"]
+    P -- 否 --> NextIP
+    Q --> NextIP
+    I1 --> NextIP
+    G1 --> NextIP
+    G2 --> NextIP
+    NextIP --> R["⑤ benign eval：<br/>白名單 IP 補跑 LLM，<br/>平衡 attack/benign 樣本數"]
+    R --> Z
+```
+
+> 下一輪迴圈執行步驟 ① 時，會把上一輪寫入 MariaDB 的「黑名單 / LLM黑名單 / 觀察名單」狀態同步到 ipset/iptables，實際完成封鎖或解封。
 
 ---
 
