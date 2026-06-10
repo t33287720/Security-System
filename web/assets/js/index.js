@@ -118,11 +118,17 @@ $(document).ready(function () {
         var $btn = $(this);
         var ip = $btn.data('ip');
         var newStatus = $btn.data('status');
+        var prevStatus = $btn.closest('tr').find('td').eq(2).text().trim();
 
         // ✅ 根據狀態顯示不同提示
         let message = (newStatus === '白名單')
             ? '請輸入白名單原因 / 身份（例如：公司內部設備）'
             : '請輸入攻擊手法（例如：Port Scan / SQL Injection）';
+
+        // 從黑名單/LLM黑名單 改為白名單 → 視為「誤判回報」，會記錄至評估資料供自動調參使用
+        if (newStatus === '白名單' && (prevStatus === '黑名單' || prevStatus === 'LLM黑名單')) {
+            message = `此 IP 目前為「${prevStatus}」，改為白名單將視為「誤判回報」，並記錄至評估資料供自動調參使用。\n\n` + message;
+        }
 
         // ✅ 強制輸入
         let attackType = prompt(message);
@@ -415,11 +421,6 @@ $(function () {
                                 ${row.status === '白名單' ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>白名單</button>
                             <button class="btn btn-sm btn-danger btn-change-status" data-ip="${row.ip}" data-status="黑名單"
                                 ${row.status === '黑名單' ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>黑名單</button>
-                            ${(row.status === '黑名單' || row.status === 'LLM黑名單')
-                                ? `<button class="btn btn-sm btn-warning btn-mark-fp" data-ip="${row.ip}"
-                                    title="標記此 IP 為誤判（False Positive）→ 記錄至 eval 並移至白名單"
-                                    data-bs-toggle="tooltip" data-bs-placement="top">⚠ 誤判</button>`
-                                : ''}
                             <button class="btn btn-sm btn-outline-danger btn-delete-ip" data-ip="${row.ip}">停用</button>
                             <button class="btn btn-sm btn-info btn-view-detail" data-ip="${row.ip}">詳細</button>
                         </td>
@@ -506,31 +507,6 @@ $(function () {
         });
     });
     // 250902 RU 停用即時IP，保留紀錄 END
-
-    // ── 標記誤判（FP）按鈕
-    $('#ipRiskTable').on('click', '.btn-mark-fp', function () {
-        const ip = $(this).data('ip');
-        if (!confirm(
-            `確定要將 ${ip} 標記為「誤判（False Positive）」嗎？\n\n` +
-            `這會：\n` +
-            `  ① 在 eval_results 記錄一筆 benign 樣本（用於計算 FPR）\n` +
-            `  ② 將此 IP 移至白名單並解除封鎖\n\n` +
-            `例如：被系統誤封的合法服務 IP（如 claude.ai、CDN 節點）`
-        )) return;
-
-        $.post('mark_fp_eval.php', { ip: ip }, 'json')
-            .done(function (data) {
-                if (data.success) {
-                    showToast(`✓ ${data.message}`, 'success');
-                    setTimeout(() => loadData(currentPage), 1500);
-                } else {
-                    showToast('✗ 失敗：' + (data.message || '未知錯誤'), 'danger');
-                }
-            })
-            .fail(function () {
-                showToast('✗ 請求失敗，請稍後再試', 'danger');
-            });
-    });
 
     // 攻擊手法篩選
     let currentAttackTypes = [];

@@ -35,6 +35,49 @@ if (empty($attack_type)) {
 }
 
 if ($type === 'single') {
+    // 若此 IP 目前為黑名單/LLM黑名單，且即將改為白名單 → 視為「誤判回報」
+    // 額外寫入 eval_results 作為 benign 樣本（供 FPR / 自動調參使用）
+    if ($status === '白名單') {
+        $stmtPrev = $conn->prepare(
+            "SELECT actions, attack_type FROM ip_risk_status_v2
+             WHERE ip = ? AND status IN ('黑名單','LLM黑名單') AND live_status = 1 LIMIT 1"
+        );
+        $stmtPrev->bind_param('s', $ip);
+        $stmtPrev->execute();
+        $prevRow = $stmtPrev->get_result()->fetch_assoc();
+        $stmtPrev->close();
+
+        if ($prevRow) {
+            $actions_raw  = $prevRow['actions'] ?? '[]';
+            $danger_level = '危險';
+            $confidence   = 0.0;
+            $actions_arr  = json_decode($actions_raw, true);
+            if (is_array($actions_arr) && count($actions_arr) > 0) {
+                $last = end($actions_arr);
+                $danger_level = $last['danger_level'] ?? '危險';
+                $confidence   = floatval($last['confidence'] ?? 0);
+            }
+
+            $stmtCnt = $conn->prepare(
+                "SELECT COUNT(*) AS cnt FROM ip_risk_logs WHERE ip = ? AND created_at >= NOW() - INTERVAL 24 HOUR"
+            );
+            $stmtCnt->bind_param('s', $ip);
+            $stmtCnt->execute();
+            $log_count = (int)($stmtCnt->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtCnt->close();
+
+            $orig_attack_type = $prevRow['attack_type'] ?? '';
+            $stmtFp = $conn->prepare(
+                "INSERT INTO eval_results
+                    (ip, true_label, gt_source, danger_level, confidence, attack_type, actions, log_count, source_count, analyzed_at)
+                 VALUES (?, 'benign', 'fp_report', ?, ?, ?, ?, ?, 0, NOW())"
+            );
+            $stmtFp->bind_param('ssdssi', $ip, $danger_level, $confidence, $orig_attack_type, $actions_raw, $log_count);
+            $stmtFp->execute();
+            $stmtFp->close();
+        }
+    }
+
     // ✅ UPDATE
     $stmt = $conn->prepare(
         "UPDATE ip_risk_status_v2 

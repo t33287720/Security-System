@@ -54,6 +54,7 @@ services:
     ports:
       - "${WEB_PORT:-80}:80"
     volumes:
+      - ./web:/var/www/html/GAIsecurity
       - /var/opt/Security-System/data/eval/output:/var/www/html/GAIsecurity/api/eval/output:ro
     networks:
       - security-system
