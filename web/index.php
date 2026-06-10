@@ -15,7 +15,7 @@ require_once __DIR__ . '/config/db_security.php';
     <title>GAI 伺服器安全防護系統</title>
     <link href="assets/css/package/bootstrap.min.css" rel="stylesheet" />
     <link href="assets/css/package/dataTables.bootstrap5.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="./assets/css/index.css">
+    <link rel="stylesheet" href="./assets/css/index.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/index.css'); ?>">
 </head>
 
 <body>
@@ -539,7 +539,7 @@ require_once __DIR__ . '/config/db_security.php';
                         <div class="card mb-3">
                             <div class="card-header" style="font-size:0.8rem;">Daily Trend</div>
                             <div class="card-body p-2 text-center">
-                                <img src="get_eval_chart.php?name=trend_over_time"
+                                <img src="get_eval_chart.php?name=trend_over_time&v=<?php echo @filemtime(__DIR__ . '/api/eval/output/trend_over_time.png'); ?>"
                                     id="evalTrendImg"
                                     class="img-fluid rounded" alt="Trend"
                                     onerror="this.parentNode.innerHTML='<span class=\'text-muted\' style=\'font-size:0.8rem;\'>圖表尚未產生（需 2 天以上資料）</span>'">
@@ -587,7 +587,7 @@ require_once __DIR__ . '/config/db_security.php';
     <script src="assets/js/package/bootstrap.bundle.min.js"></script>
     <script src="assets/js/package/jquery.dataTables.min.js"></script>
     <script src="assets/js/package/dataTables.bootstrap5.min.js"></script>
-    <script src="assets/js/index.js"></script>
+    <script src="assets/js/index.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/index.js'); ?>"></script>
 
     <script>
     // Real-time clock

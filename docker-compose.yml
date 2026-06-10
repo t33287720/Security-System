@@ -11,6 +11,7 @@ services:
     privileged: true              # required for ipset / iptables
     mem_limit: 512m
     environment:
+      - TZ=Asia/Taipei
       - PYTHONUNBUFFERED=1
       - ES_HOST=${ES_HOST_WORKER}
       - ES_USER=elastic

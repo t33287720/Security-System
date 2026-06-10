@@ -92,9 +92,6 @@ $(document).ready(function () {
         loadEvalResults();
     });
     $(document).on('click', '#btnRefreshEval', function () {
-        // 重新整理時同步刷新趨勢圖（加 ts 避免快取）
-        const img = document.getElementById('evalTrendImg');
-        if (img) img.src = 'get_eval_chart.php?name=trend_over_time&t=' + Date.now();
         loadEvalResults();
     });
 
@@ -1359,6 +1356,10 @@ function fmtPct(v) { return v !== null && v !== undefined ? (v * 100).toFixed(1)
 function fmtNum(v) { return v !== null && v !== undefined ? parseFloat(v).toFixed(4)      : '—'; }
 
 function loadEvalResults() {
+    // 每次載入都刷新趨勢圖（加 ts 避免快取，確保拿到最新產出的 PNG）
+    const trendImg = document.getElementById('evalTrendImg');
+    if (trendImg) trendImg.src = 'get_eval_chart.php?name=trend_over_time&t=' + Date.now();
+
     const cards  = document.getElementById('evalMetricCards');
     const tbody  = document.getElementById('evalRecordsBody');
     const best   = document.getElementById('evalBestSweep');
