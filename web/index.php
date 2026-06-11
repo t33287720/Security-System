@@ -40,6 +40,7 @@ require_once __DIR__ . '/config/db_security.php';
         <button id="showIpRisk"    class="nav-tab">IP 狀態管理</button>
         <button id="showIpToday"   class="nav-tab">今日封鎖</button>
         <button id="showAIAnalyze" class="nav-tab">Log 分析</button>
+        <button id="showVulnScan"  class="nav-tab">弱點掃描</button>
     </nav>
 
     <!-- ===== Modals ===== -->
@@ -125,6 +126,26 @@ require_once __DIR__ . '/config/db_security.php';
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
                     <button type="button" class="btn btn-danger btn-sm" id="confirmDeleteBtn">確認停用</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="vulnDetailModal" tabindex="-1" aria-labelledby="vulnDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="vulnDetailModalLabel">弱點詳細資訊</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="font-size:0.85rem;">
+                    <p class="mb-1"><strong>修補建議：</strong></p>
+                    <p id="vulnDetailRemediation" style="white-space:pre-wrap;"></p>
+                    <p class="mb-1"><strong>掃描證據：</strong></p>
+                    <pre id="vulnDetailEvidence" style="white-space:pre-wrap;font-family:'Consolas',monospace;font-size:0.78rem;background:#f8f9fa;padding:0.75rem;border-radius:4px;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
                 </div>
             </div>
         </div>
@@ -573,6 +594,59 @@ require_once __DIR__ . '/config/db_security.php';
                     </div>
 
                 </div>
+            </div>
+        </div>
+
+        <!-- ====== Panel: 弱點掃描 ====== -->
+        <div id="vulnScanTableContainer" class="panel-card" style="display:none;">
+            <div class="panel-header">
+                <span class="panel-title">弱點掃描</span>
+                <span style="font-size:0.75rem;color:var(--muted);">AI-Assisted Vulnerability Scan (nmap + searchsploit + gemma3:27b)</span>
+            </div>
+
+            <!-- Search & Filters -->
+            <div class="filter-bar">
+                <input type="text" id="vulnSearchInput" class="search-input" placeholder="搜尋 目標 / CVE / 標題...">
+                <div class="filter-divider"></div>
+                <div class="filter-group">
+                    <label><input type="checkbox" class="vuln-severity-filter" value="高" checked> 高</label>
+                    <label><input type="checkbox" class="vuln-severity-filter" value="中" checked> 中</label>
+                    <label><input type="checkbox" class="vuln-severity-filter" value="低" checked> 低</label>
+                    <label><input type="checkbox" class="vuln-severity-filter" value="資訊" checked> 資訊</label>
+                </div>
+                <div class="filter-divider"></div>
+                <div class="filter-group">
+                    <label><input type="checkbox" class="vuln-status-filter" value="pending" checked> 待處理</label>
+                    <label><input type="checkbox" class="vuln-status-filter" value="confirmed" checked> 已確認</label>
+                    <label><input type="checkbox" class="vuln-status-filter" value="false_positive"> 誤判</label>
+                    <label><input type="checkbox" class="vuln-status-filter" value="resolved"> 已解決</label>
+                </div>
+            </div>
+
+            <div class="sys-table-wrap">
+                <table id="vulnScanTable" class="table table-striped table-bordered align-middle mb-0">
+                    <thead class="table-dark text-center">
+                        <tr>
+                            <th>目標</th>
+                            <th>服務 / 版本</th>
+                            <th>來源</th>
+                            <th>CVE</th>
+                            <th>標題</th>
+                            <th>嚴重程度</th>
+                            <th>信心度</th>
+                            <th>狀態</th>
+                            <th>掃描時間</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="p-3" style="border-top:1px solid var(--border);background:#fafbfd;">
+                <nav>
+                    <ul class="pagination pagination-sm justify-content-center mb-0" id="vulnTablePagination"></ul>
+                </nav>
             </div>
         </div>
 

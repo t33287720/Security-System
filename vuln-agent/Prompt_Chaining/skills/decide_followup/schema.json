@@ -1,0 +1,7 @@
+{
+  "required": ["need_followup", "tool", "params", "reason"],
+  "need_followup": false,
+  "tool": "none",
+  "params": {},
+  "reason": ""
+}

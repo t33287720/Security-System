@@ -70,22 +70,6 @@ CREATE TABLE IF NOT EXISTS eval_results (
   INDEX idx_ip (ip)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ── Manual IP blacklist ───────────────────────────────────────
-CREATE TABLE IF NOT EXISTS ip_blacklist (
-  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  ip         VARCHAR(45) NOT NULL UNIQUE,
-  reason     VARCHAR(255),
-  created_at DATETIME    DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ── Scan results ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS scan_results (
-  id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  ip         VARCHAR(45),
-  result     JSON,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 -- ── Web login users ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
   id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

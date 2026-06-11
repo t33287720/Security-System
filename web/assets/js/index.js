@@ -28,15 +28,16 @@ function showToast(message, type = 'info', duration = 3000) {
 // 表格切換
 $(document).ready(function () {
     // 所有的分頁按鈕 ID
-    const TAB_BUTTONS = ['#showElk', '#showIpRisk', '#showIpToday', '#showAIAnalyze'];
+    const TAB_BUTTONS = ['#showElk', '#showIpRisk', '#showIpToday', '#showAIAnalyze', '#showVulnScan'];
     // 所有的表格容器 ID
-    const TAB_CONTAINERS = ['#elkTableContainer', '#ipRiskTableContainer', '#ipTodayTableContainer', '#aiAnalyzeContainer'];
+    const TAB_CONTAINERS = ['#elkTableContainer', '#ipRiskTableContainer', '#ipTodayTableContainer', '#aiAnalyzeContainer', '#vulnScanTableContainer'];
     // 分頁 ID 與標題的對應關係
     const TITLES = {
         '#showElk': 'GAI伺服器安全防護系統日誌檢視',
         '#showIpRisk': 'IP 狀態清單',
         '#showIpToday': '今日封鎖名單',
-        '#showAIAnalyze': 'Log分析'
+        '#showAIAnalyze': 'Log分析',
+        '#showVulnScan': '弱點掃描'
     };
 
     /**
@@ -78,6 +79,12 @@ $(document).ready(function () {
     $('#showAIAnalyze').click(function (e) {
         e.preventDefault();
         switchTab('#showAIAnalyze', '#aiAnalyzeContainer');
+    });
+
+    $('#showVulnScan').click(function (e) {
+        e.preventDefault();
+        switchTab('#showVulnScan', '#vulnScanTableContainer');
+        loadVulnFindings(0);
     });
 
     // AI 分析區內已知攻擊 tab
@@ -1533,3 +1540,178 @@ function loadEvalResults() {
             cards.innerHTML = `<div class="text-danger p-3">錯誤：${err.message}</div>`;
         });
 }
+
+// ============ 弱點掃描（vuln-agent）分頁 ============
+$(function () {
+    const $pagination = $('#vulnTablePagination');
+    const rowsPerPage = 10;
+
+    let currentSearch = '';
+    let currentSeverities = $('.vuln-severity-filter:checked').map(function () { return $(this).val(); }).get();
+    let currentStatuses = $('.vuln-status-filter:checked').map(function () { return $(this).val(); }).get();
+
+    const STATUS_LABELS = {
+        pending: '待處理',
+        confirmed: '已確認',
+        false_positive: '誤判',
+        resolved: '已解決'
+    };
+    const STATUS_BADGES = {
+        pending: 'bg-secondary',
+        confirmed: 'bg-danger',
+        false_positive: 'bg-success',
+        resolved: 'bg-primary'
+    };
+    const SEVERITY_BADGES = {
+        '高': 'bg-danger',
+        '中': 'bg-warning text-dark',
+        '低': 'bg-info text-dark',
+        '資訊': 'bg-secondary'
+    };
+
+    // 分頁渲染函式（與 ipRiskTable 相同邏輯）
+    function renderVulnPagination(total, page) {
+        const totalPages = Math.ceil(total / rowsPerPage);
+        $pagination.empty();
+        if (totalPages <= 1) return;
+
+        let pages = [];
+        if (totalPages <= 7) {
+            for (let i = 0; i < totalPages; i++) pages.push(i);
+        } else {
+            pages.push(0);
+            if (page > 3) pages.push('...');
+            let start = Math.max(1, page - 2);
+            let end = Math.min(totalPages - 2, page + 2);
+            for (let i = start; i <= end; i++) pages.push(i);
+            if (page < totalPages - 4) pages.push('...');
+            pages.push(totalPages - 1);
+        }
+
+        pages.forEach(function (p) {
+            if (p === '...') {
+                $pagination.append('<li class="page-item disabled"><span class="page-link">…</span></li>');
+            } else {
+                $pagination.append(
+                    `<li class="page-item ${p === page ? 'active' : ''}">
+                        <a class="page-link" href="#" data-page="${p}">${p + 1}</a>
+                    </li>`
+                );
+            }
+        });
+
+        $pagination.find('a[data-page]').click(function (e) {
+            e.preventDefault();
+            loadVulnFindings(parseInt($(this).data('page')));
+        });
+    }
+
+    function renderVulnTable(data) {
+        let html = '';
+        if (data && data.length > 0) {
+            data.forEach(function (row) {
+                const statusKey = row.status || 'pending';
+                html += `
+                    <tr class="text-center">
+                        <td>${row.target}${row.port ? ':' + row.port : ''}</td>
+                        <td>${row.service || ''}${row.version ? ' ' + row.version : ''}</td>
+                        <td>${row.source || ''}</td>
+                        <td>${row.cve_id || '—'}</td>
+                        <td class="text-start">${row.title || ''}</td>
+                        <td><span class="badge ${SEVERITY_BADGES[row.severity] || 'bg-secondary'}">${row.severity || '—'}</span></td>
+                        <td>${row.confidence !== null ? parseFloat(row.confidence).toFixed(2) : '—'}</td>
+                        <td><span class="badge ${STATUS_BADGES[statusKey] || 'bg-secondary'}">${STATUS_LABELS[statusKey] || statusKey}</span></td>
+                        <td><small>${row.scanned_at || ''}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-info btn-vuln-detail" data-id="${row.id}"
+                                data-remediation="${encodeURIComponent(row.remediation || '')}"
+                                data-evidence="${encodeURIComponent(row.evidence || '')}">詳細</button>
+                            <button class="btn btn-sm btn-success btn-vuln-status" data-id="${row.id}" data-status="confirmed"
+                                ${statusKey === 'confirmed' ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>確認</button>
+                            <button class="btn btn-sm btn-outline-secondary btn-vuln-status" data-id="${row.id}" data-status="false_positive"
+                                ${statusKey === 'false_positive' ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>誤判</button>
+                            <button class="btn btn-sm btn-primary btn-vuln-status" data-id="${row.id}" data-status="resolved"
+                                ${statusKey === 'resolved' ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>已解決</button>
+                        </td>
+                    </tr>`;
+            });
+        } else {
+            html = '<tr><td colspan="10" class="text-center">無數據</td></tr>';
+        }
+        $('#vulnScanTable tbody').html(html);
+    }
+
+    window.loadVulnFindings = function (page = 0) {
+        $.ajax({
+            url: 'get_vuln_findings.php',
+            method: 'GET',
+            data: {
+                page: page,
+                page_size: rowsPerPage,
+                search: currentSearch,
+                severities: currentSeverities.join(','),
+                statuses: currentStatuses.join(',')
+            },
+            dataType: 'json',
+            success: function (res) {
+                renderVulnTable(res.data);
+                renderVulnPagination(res.total, page);
+            },
+            error: function () {
+                showToast('弱點掃描資料載入失敗', 'danger');
+            }
+        });
+    };
+
+    // 搜尋輸入（debounce）
+    let vulnSearchDebounce = null;
+    $('#vulnSearchInput').on('input', function () {
+        clearTimeout(vulnSearchDebounce);
+        const value = $(this).val().trim();
+        vulnSearchDebounce = setTimeout(function () {
+            currentSearch = value;
+            loadVulnFindings(0);
+        }, 500);
+    });
+
+    // 嚴重程度 / 狀態篩選
+    $('.vuln-severity-filter, .vuln-status-filter').on('change', function () {
+        currentSeverities = $('.vuln-severity-filter:checked').map(function () { return $(this).val(); }).get();
+        currentStatuses = $('.vuln-status-filter:checked').map(function () { return $(this).val(); }).get();
+        loadVulnFindings(0);
+    });
+
+    // 詳細 modal
+    $('#vulnScanTable').on('click', '.btn-vuln-detail', function () {
+        const remediation = decodeURIComponent($(this).data('remediation') || '');
+        const evidence = decodeURIComponent($(this).data('evidence') || '');
+        $('#vulnDetailRemediation').text(remediation || '（無建議）');
+        $('#vulnDetailEvidence').text(evidence || '（無）');
+        $('#vulnDetailModal').modal('show');
+    });
+
+    // 狀態變更
+    $('#vulnScanTable').on('click', '.btn-vuln-status', function () {
+        const $btn = $(this);
+        const id = $btn.data('id');
+        const status = $btn.data('status');
+
+        $.ajax({
+            url: 'update_vuln_status.php',
+            method: 'POST',
+            data: { id: id, status: status },
+            dataType: 'json',
+            success: function (res) {
+                if (res.success) {
+                    showToast('✅ 狀態已更新為「' + (STATUS_LABELS[status] || status) + '」', 'success');
+                    loadVulnFindings(0);
+                } else {
+                    showToast('✗ 更新失敗：' + (res.message || ''), 'danger');
+                }
+            },
+            error: function () {
+                showToast('✗ 請求失敗，請稍後再試', 'danger');
+            }
+        });
+    });
+});

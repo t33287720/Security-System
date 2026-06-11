@@ -1,0 +1,8 @@
+{
+  "required": ["is_relevant", "severity", "confidence", "remediation", "reason"],
+  "is_relevant": false,
+  "severity": "",
+  "confidence": 0,
+  "remediation": "",
+  "reason": ""
+}
