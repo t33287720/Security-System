@@ -85,6 +85,7 @@ $(document).ready(function () {
         e.preventDefault();
         switchTab('#showVulnScan', '#vulnScanTableContainer');
         loadVulnFindings(0);
+        loadVulnSummary();
     });
 
     // AI 分析區內已知攻擊 tab
@@ -1641,6 +1642,29 @@ $(function () {
         $('#vulnScanTable tbody').html(html);
     }
 
+    window.loadVulnSummary = function () {
+        $.ajax({
+            url: 'get_vuln_summary.php',
+            method: 'GET',
+            dataType: 'json',
+            success: function (res) {
+                const sev = res.severity || {};
+                $('#vulnStatTotal').text(res.total ?? '—');
+                $('#vulnStatHigh').text(sev['高'] ?? 0);
+                $('#vulnStatMid').text(sev['中'] ?? 0);
+                $('#vulnStatLow').text((sev['低'] ?? 0) + (sev['資訊'] ?? 0));
+                $('#vulnStatPending').text(res.pending ?? 0);
+                $('#vulnStatTargets').text(res.affected_targets ?? 0);
+                $('#vulnSummaryLastScan').text(
+                    res.last_scan ? '最後掃描時間：' + res.last_scan : '尚無掃描紀錄'
+                );
+            },
+            error: function () {
+                showToast('弱點掃描總覽載入失敗', 'danger');
+            }
+        });
+    };
+
     window.loadVulnFindings = function (page = 0) {
         $.ajax({
             url: 'get_vuln_findings.php',
@@ -1705,6 +1729,7 @@ $(function () {
                 if (res.success) {
                     showToast('✅ 狀態已更新為「' + (STATUS_LABELS[status] || status) + '」', 'success');
                     loadVulnFindings(0);
+                    loadVulnSummary();
                 } else {
                     showToast('✗ 更新失敗：' + (res.message || ''), 'danger');
                 }

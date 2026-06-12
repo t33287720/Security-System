@@ -601,7 +601,41 @@ require_once __DIR__ . '/config/db_security.php';
         <div id="vulnScanTableContainer" class="panel-card" style="display:none;">
             <div class="panel-header">
                 <span class="panel-title">弱點掃描</span>
-                <span style="font-size:0.75rem;color:var(--muted);">AI-Assisted Vulnerability Scan (nmap + searchsploit + gemma3:27b)</span>
+                <span id="vulnSummaryLastScan" style="font-size:0.75rem;color:var(--muted);">AI-Assisted Vulnerability Scan (nmap + searchsploit + gemma3:27b)</span>
+            </div>
+
+            <!-- Summary Stat Cards -->
+            <div class="today-stat-row">
+                <div class="today-stat-card">
+                    <div class="today-stat-label">弱點總筆數</div>
+                    <div class="today-stat-value" id="vulnStatTotal">—</div>
+                    <div class="today-stat-sub">所有掃描紀錄</div>
+                </div>
+                <div class="today-stat-card today-stat-card--red">
+                    <div class="today-stat-label">高風險</div>
+                    <div class="today-stat-value" id="vulnStatHigh">—</div>
+                    <div class="today-stat-sub">建議優先處理</div>
+                </div>
+                <div class="today-stat-card today-stat-card--orange">
+                    <div class="today-stat-label">中風險</div>
+                    <div class="today-stat-value" id="vulnStatMid">—</div>
+                    <div class="today-stat-sub">建議排程修補</div>
+                </div>
+                <div class="today-stat-card today-stat-card--gray">
+                    <div class="today-stat-label">低風險 / 資訊</div>
+                    <div class="today-stat-value" id="vulnStatLow">—</div>
+                    <div class="today-stat-sub">可持續觀察</div>
+                </div>
+                <div class="today-stat-card today-stat-card--blue">
+                    <div class="today-stat-label">待處理項目</div>
+                    <div class="today-stat-value" id="vulnStatPending">—</div>
+                    <div class="today-stat-sub">尚未標記狀態</div>
+                </div>
+                <div class="today-stat-card today-stat-card--red">
+                    <div class="today-stat-label">受影響主機</div>
+                    <div class="today-stat-value" id="vulnStatTargets">—</div>
+                    <div class="today-stat-sub">高 / 中風險目標數</div>
+                </div>
             </div>
 
             <!-- Search & Filters -->
