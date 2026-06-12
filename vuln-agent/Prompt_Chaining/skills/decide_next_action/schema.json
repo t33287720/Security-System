@@ -1,7 +1,6 @@
 {
-  "required": ["need_followup", "tool", "params", "reason"],
-  "need_followup": false,
-  "tool": "none",
+  "required": ["action", "params", "reason"],
+  "action": "done",
   "params": {},
   "reason": ""
 }

@@ -85,10 +85,30 @@ flowchart TD
 | nginx | **1.18.0** | Host | 反向代理，將 `/GAIsecurity/` 導向 Web 容器 |
 | worker | —— | Docker | Python API：輪詢 ES、呼叫 LLM、同步 ipset |
 | web | —— | Docker | PHP 管理儀表板（nginx + php-fpm） |
+| vuln-agent | —— | Docker | 主動弱點掃描：nmap + searchsploit + LLM(gemma3:27b) triage |
 
 > **設計原則**：ELK、MariaDB、Ollama 是跨產品的共用資源，保留在宿主機由 systemctl 管理。  
 > Zeek 需直接存取實體網卡（raw socket），不適合容器化。  
-> 兩個 Docker 容器（web、worker）只負責應用邏輯。
+> 三個 Docker 容器（web、worker、vuln-agent）只負責應用邏輯。
+
+### vuln-agent：事前弱點掃描（主動防護）
+
+worker 負責「攻擊發生中/後」的流量分析與封鎖，vuln-agent 則補上「攻擊發生前」的一塊：
+定期主動掃描自身服務的弱點，在被利用前先行修補。
+
+- 常駐容器，每天 `VULN_SCAN_DAILY_TIME`（預設 `00:00`，依 `TZ=Asia/Taipei`）對 `VULN_SCAN_TARGETS` 自動執行一輪 `nmap -sV -sC --script vuln` + searchsploit 掃描
+- 每筆候選弱點交由 LLM（gemma3:27b）判斷是否與偵測到的服務版本相關、給出嚴重程度與修補建議
+- 信心不足（confidence < 0.5）時進入 ReAct 自主補充檢測迴圈：LLM 從目前可用的唯讀工具
+  （`nmap_script_recheck` / `http_probe` / `searchsploit_search`）中自行決定是否再執行一個工具取得證據，
+  最多執行 `VULN_REACT_MAX_ROUNDS`（預設 2）輪後重新判斷；工具清單由程式動態提供，新增工具不需修改提示詞
+- 結果寫入 `vuln_findings`，於儀表板「弱點掃描」分頁呈現總覽統計與明細，並可標記 待處理/已確認/誤判/已解決
+- 掃描過程即時輸出到容器日誌（每個 port 的候選弱點、LLM 初步判斷、每一輪 ReAct 決策與理由、補充判斷結果），
+  可用 `docker compose logs -f vuln-agent` 即時觀察 agent 的判斷過程，不是只回傳最終結果的黑箱
+
+```bash
+# 立即手動跑一次（不影響常駐排程）
+docker compose run --rm -e VULN_SCAN_RUN_ONCE=true vuln-agent
+```
 
 ---
 
@@ -291,6 +311,11 @@ MANUAL_IPS=140.124.32.16,211.72.136.45
 
 # ── Web 容器對外 Port ───────────────────────────
 WEB_PORT=8082  # 視宿主機 port 占用情況調整
+
+# ── 弱點掃描（vuln-agent，逗號分隔IP/hostname）──────────────
+VULN_SCAN_TARGETS=127.0.0.1   # 預設只掃描本機
+VULN_SCAN_DAILY_TIME=00:00    # 每天自動掃描時間（依 TZ=Asia/Taipei）
+VULN_REACT_MAX_ROUNDS=2       # 低信心弱點的 ReAct 自主補充檢測最多輪數
 ```
 
 ---

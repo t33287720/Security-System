@@ -14,7 +14,8 @@
 - target / port / service / product / version：被掃描主機的服務資訊
 - finding_source：候選弱點來源（nmap_vuln_script 或 searchsploit）
 - finding：該來源回報的原始內容（NSE腳本輸出 或 exploit-db 標題/CVE編號）
-- followup_evidence：若有，代表這是針對先前低信心結果的二次驗證證據
+- followup_evidence：若不為空陣列，代表這是針對先前低信心結果，
+  經過一輪或多輪自主檢測後累積的補充證據（每筆含 action/params/result/reason）
 
 判斷原則：
 - 必須考慮版本範圍是否真的包含已偵測到的版本，不要只憑關鍵字比對就判定有風險

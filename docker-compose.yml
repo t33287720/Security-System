@@ -62,7 +62,8 @@ services:
 
   # ── Vulnerability Scan Agent (Python) ──────────────────────────
   # 主動弱點掃描：nmap + searchsploit + LLM(gemma3:27b) triage
-  # 手動觸發：docker compose run --rm vuln-agent
+  # 常駐迴圈，每天 VULN_SCAN_DAILY_TIME（預設凌晨00:00）自動執行一次掃描
+  # 手動立即掃描一次：docker compose run --rm -e VULN_SCAN_RUN_ONCE=true vuln-agent
   vuln-agent:
     build:
       context: ./vuln-agent
@@ -79,8 +80,9 @@ services:
       - MYSQL_DB=CCT_Security
       - OLLAMA_URL=${OLLAMA_URL}
       - VULN_SCAN_TARGETS=${VULN_SCAN_TARGETS:-127.0.0.1}
-    restart: "no"                  # 先手動觸發，不常駐
-    profiles: ["vuln-scan"]        # 避免 `docker compose up` 時自動啟動
+      - VULN_SCAN_DAILY_TIME=${VULN_SCAN_DAILY_TIME:-00:00}
+      - VULN_REACT_MAX_ROUNDS=${VULN_REACT_MAX_ROUNDS:-2}
+    restart: unless-stopped
 
 networks:
   security-system:

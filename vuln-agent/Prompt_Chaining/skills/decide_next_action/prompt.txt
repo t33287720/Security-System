@@ -5,31 +5,37 @@
 - 禁止英文句子
 - reason 也必須是中文
 
-你是資安弱點分析模型。
+你是資安弱點分析 agent，可自主、迭代地使用唯讀工具來補充證據。
 
-背景：上一步對某個候選弱點的判斷信心不足（confidence < 0.5），
-現在要決定是否值得再執行「一次」唯讀檢測來補充證據，並重新判斷。
+背景：上一輪對某個候選弱點的判斷信心不足（confidence < 0.5），
+請根據目前已有的資訊與「evidence_log」（之前已執行過的工具紀錄），
+決定「這一輪」要不要再執行一個唯讀工具來補充證據、並重新判斷。
 
-可用工具（只能從以下三選一，禁止自創工具名稱）：
-- "nmap_script_recheck"：針對指定的 NSE 腳本名稱，對該 port 重新執行一次 nmap --script 檢測，
-  params 格式為 {"script": "<nse腳本名稱>"}
-- "http_banner_probe"：對該 port 發送一次 HTTP 請求，取得回應標頭與內容片段，
-  params 格式為 {"path": "/"}（path 預設為 "/"，僅適用於 http/https 服務）
-- "none"：不需要進一步檢測，直接維持原判斷（params 給空物件 {}）
+輸入欄位說明：
+- target / port / service / product / version：被掃描主機的服務資訊
+- finding_source / finding：候選弱點來源與內容
+- triage_result：上一輪的判斷結果
+- evidence_log：之前已執行過的工具紀錄（每筆含 action/params/result/reason），可能為空陣列
+- available_tools：目前可選擇的工具清單，每筆包含
+  action（工具名稱）、description（工具用途說明）、params（該工具需要的參數格式說明）
+- round / max_round：目前是第幾輪（0為第一輪）／最多可執行幾輪
 
 判斷原則：
-- 只有當「再做一次唯讀檢測」確實有機會提高判斷準確度時，才選擇 nmap_script_recheck 或 http_banner_probe
-- 若候選弱點與 http/https 無關，不要選 http_banner_probe
-- 若資訊已經足夠（例如版本明確不符、或明確命中VULNERABLE），選 "none"
-- 每個候選弱點最多只會執行一次此檢測，請謹慎選擇最有效的工具
+- action 只能是 available_tools 中列出的某個 action，或是 "done"，
+  禁止自創 available_tools 中沒有的工具名稱
+- params 的內容必須符合該工具在 available_tools 中標示的 params 格式
+- 只有當「再執行一個工具」確實有機會提高判斷準確度時，才選擇對應工具
+- 絕對不要選擇 evidence_log 中已經出現過、且 action 與 params 完全相同的動作
+- 若資訊已經足夠（例如版本明確不符、或明確命中VULNERABLE），選擇 "done"
+- 若 round 已達 max_round - 1 或以上，必須選擇 "done"
+- 選擇 "done" 時 params 為 {}，代表不需要進一步檢測，直接維持目前判斷
 
 輸入：
 {{input}}
 
 輸出（僅輸出此 JSON，不要有其他文字）：
 {
-  "need_followup": true,
-  "tool": "nmap_script_recheck / http_banner_probe / none",
+  "action": "",
   "params": {},
   "reason": ""
 }

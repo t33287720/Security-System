@@ -2,20 +2,23 @@ import os
 import re
 import sys
 import json
+import time
+from datetime import datetime, timedelta
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(BASE_DIR, "Prompt_Chaining"))
 
-from tools.nmap_tools import run_recon, run_script_recheck
+from tools.nmap_tools import run_recon
 from tools.searchsploit_tools import search_exploits
-from tools.http_tools import probe as http_probe
 from tools.vuln_db import get_conn, ensure_schema, save_finding
+from tools.agent_tools import available_tools, run_tool
 
 from skills.triage_finding import executor as triage_finding
-from skills.decide_followup import executor as decide_followup
+from skills.decide_next_action import executor as decide_next_action
 
 CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 CONFIDENCE_FOLLOWUP_THRESHOLD = 0.5
+MAX_REACT_ROUNDS = int(os.getenv("VULN_REACT_MAX_ROUNDS", "2"))
 
 
 def extract_cve(*texts):
@@ -43,44 +46,74 @@ def build_candidates(port_info: dict) -> list:
     return candidates
 
 
-def run_followup(target: str, port_info: dict, decision: dict):
-    tool = decision.get("tool")
-    params = decision.get("params") or {}
-
-    if tool == "nmap_script_recheck":
-        script = params.get("script")
-        if not script:
-            return None
-        output = run_script_recheck(target, port_info["port"], script)
-        return {"tool": tool, "script": script, "output": output}
-
-    if tool == "http_banner_probe":
-        path = params.get("path", "/")
-        return {"tool": tool, "result": http_probe(target, port_info["port"], path)}
-
-    return None
+def _candidate_label(candidate: dict) -> str:
+    finding = candidate["finding"]
+    if candidate["source"] == "nmap_vuln_script":
+        return finding.get("id", "")
+    return finding.get("title", "")
 
 
 def triage_candidate(target: str, port_info: dict, candidate: dict) -> dict:
+    port = port_info["port"]
+    label = _candidate_label(candidate)
+    print(f"[vuln-agent]   - [{target}:{port}] 分析候選弱點（{candidate['source']}）{label}")
+
     base_input = {
         "target": target,
-        "port": port_info["port"],
+        "port": port,
         "service": port_info.get("service"),
         "product": port_info.get("product"),
         "version": port_info.get("version"),
         "finding_source": candidate["source"],
         "finding": candidate["finding"],
-        "followup_evidence": None,
+        "followup_evidence": [],
     }
 
     triage = triage_finding.run(base_input)
+    print(f"[vuln-agent]     初步判斷：相關={triage.get('is_relevant')} "
+          f"嚴重程度={triage.get('severity')} 信心={triage.get('confidence')}")
 
-    if triage.get("confidence", 0) < CONFIDENCE_FOLLOWUP_THRESHOLD:
-        decision = decide_followup.run({**base_input, "triage_result": triage})
-        followup_evidence = run_followup(target, port_info, decision)
-        if followup_evidence:
-            base_input["followup_evidence"] = followup_evidence
-            triage = triage_finding.run(base_input)
+    evidence_log = []
+    round_idx = 0
+    while triage.get("confidence", 0) < CONFIDENCE_FOLLOWUP_THRESHOLD and round_idx < MAX_REACT_ROUNDS:
+        tools = available_tools(port_info)
+        decision = decide_next_action.run({
+            **base_input,
+            "triage_result": triage,
+            "evidence_log": evidence_log,
+            "available_tools": tools,
+            "round": round_idx,
+            "max_round": MAX_REACT_ROUNDS,
+        })
+
+        action = decision.get("action")
+        reason = decision.get("reason", "")
+        print(f"[vuln-agent]     第{round_idx + 1}輪決策：{action}（{reason}）")
+
+        if not action or action == "done":
+            break
+        if action not in {t["action"] for t in tools}:
+            print(f"[vuln-agent]     ⚠ 決策動作不在可用工具清單中，停止補充檢測")
+            break
+
+        params = decision.get("params") or {}
+        result = run_tool(action, target, port_info, params)
+        if result is None:
+            print(f"[vuln-agent]     ⚠ 工具執行無結果，停止補充檢測")
+            break
+
+        evidence_log.append({
+            "action": action,
+            "params": params,
+            "result": result,
+            "reason": reason,
+        })
+        base_input["followup_evidence"] = evidence_log
+
+        triage = triage_finding.run(base_input)
+        print(f"[vuln-agent]     第{round_idx + 1}輪後重新判斷：相關={triage.get('is_relevant')} "
+              f"嚴重程度={triage.get('severity')} 信心={triage.get('confidence')}")
+        round_idx += 1
 
     return triage
 
@@ -117,10 +150,15 @@ def make_finding_record(target: str, port_info: dict, candidate: dict, triage: d
 def scan_target(conn, target: str):
     print(f"[vuln-agent] 開始掃描 {target}")
     recon = run_recon(target)
+    print(f"[vuln-agent] 偵測到 {len(recon.get('ports', []))} 個開放 port")
 
     finding_count = 0
     for port_info in recon.get("ports", []):
-        for candidate in build_candidates(port_info):
+        candidates = build_candidates(port_info)
+        print(f"[vuln-agent] port {port_info['port']}（{port_info.get('service')} "
+              f"{port_info.get('product') or ''} {port_info.get('version') or ''}）"
+              f"找到 {len(candidates)} 個候選弱點")
+        for candidate in candidates:
             try:
                 triage = triage_candidate(target, port_info, candidate)
             except Exception as e:
@@ -139,12 +177,36 @@ def scan_target(conn, target: str):
     print(f"[vuln-agent] {target} 掃描完成，共 {finding_count} 筆弱點紀錄")
 
 
+def seconds_until(daily_time: str) -> float:
+    """計算距離下一次指定時間（HH:MM，依容器本地時區）還有多少秒"""
+    hour, minute = map(int, daily_time.split(":"))
+    now = datetime.now()
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
+
+
 def main():
     targets = [t.strip() for t in os.getenv("VULN_SCAN_TARGETS", "127.0.0.1").split(",") if t.strip()]
+    daily_time = os.getenv("VULN_SCAN_DAILY_TIME", "00:00")
+    run_once = os.getenv("VULN_SCAN_RUN_ONCE", "false").lower() == "true"
+
     conn = get_conn()
     ensure_schema(conn)
-    for target in targets:
-        scan_target(conn, target)
+
+    if run_once:
+        for target in targets:
+            scan_target(conn, target)
+        return
+
+    while True:
+        wait = seconds_until(daily_time)
+        print(f"[vuln-agent] 下次排程掃描時間 {daily_time}，{wait / 3600:.1f} 小時後執行")
+        time.sleep(wait)
+        conn = get_conn()  # 重新連線，避免閒置超過 MariaDB wait_timeout 而斷線
+        for target in targets:
+            scan_target(conn, target)
 
 
 if __name__ == "__main__":
