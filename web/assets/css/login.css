@@ -176,3 +176,11 @@ body::before {
     text-align: center;
     letter-spacing: 0.04em;
 }
+
+.login-copyright {
+    margin-top: 6px;
+    font-size: 0.65rem;
+    color: rgba(255,255,255,0.18);
+    text-align: center;
+    letter-spacing: 0.02em;
+}

@@ -101,5 +101,6 @@ $conn->close();
     </div>
 
     <div class="login-footer">AUTHORIZED ACCESS ONLY &nbsp;|&nbsp; GAI Security Platform</div>
+    <div class="login-copyright">&copy; 2025–2026 北科大 CCT 團隊 (Taipei Tech CCT Group). All rights reserved.</div>
 </body>
 </html>
