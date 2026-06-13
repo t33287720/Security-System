@@ -28,16 +28,17 @@ function showToast(message, type = 'info', duration = 3000) {
 // 表格切換
 $(document).ready(function () {
     // 所有的分頁按鈕 ID
-    const TAB_BUTTONS = ['#showElk', '#showIpRisk', '#showIpToday', '#showAIAnalyze', '#showVulnScan'];
+    const TAB_BUTTONS = ['#showElk', '#showIpRisk', '#showIpToday', '#showAIAnalyze', '#showVulnScan', '#showCodeScan'];
     // 所有的表格容器 ID
-    const TAB_CONTAINERS = ['#elkTableContainer', '#ipRiskTableContainer', '#ipTodayTableContainer', '#aiAnalyzeContainer', '#vulnScanTableContainer'];
+    const TAB_CONTAINERS = ['#elkTableContainer', '#ipRiskTableContainer', '#ipTodayTableContainer', '#aiAnalyzeContainer', '#vulnScanTableContainer', '#codeScanTableContainer'];
     // 分頁 ID 與標題的對應關係
     const TITLES = {
         '#showElk': 'GAI伺服器安全防護系統日誌檢視',
         '#showIpRisk': 'IP 狀態清單',
         '#showIpToday': '今日封鎖名單',
         '#showAIAnalyze': 'Log分析',
-        '#showVulnScan': '弱點掃描'
+        '#showVulnScan': '弱點掃描',
+        '#showCodeScan': '原始碼掃描'
     };
 
     /**
@@ -86,6 +87,13 @@ $(document).ready(function () {
         switchTab('#showVulnScan', '#vulnScanTableContainer');
         loadVulnFindings(0);
         loadVulnSummary();
+    });
+
+    $('#showCodeScan').click(function (e) {
+        e.preventDefault();
+        switchTab('#showCodeScan', '#codeScanTableContainer');
+        loadCodeFindings(0);
+        loadCodeSummary();
     });
 
     // AI 分析區內已知攻擊 tab
@@ -1730,6 +1738,204 @@ $(function () {
                     showToast('✅ 狀態已更新為「' + (STATUS_LABELS[status] || status) + '」', 'success');
                     loadVulnFindings(0);
                     loadVulnSummary();
+                } else {
+                    showToast('✗ 更新失敗：' + (res.message || ''), 'danger');
+                }
+            },
+            error: function () {
+                showToast('✗ 請求失敗，請稍後再試', 'danger');
+            }
+        });
+    });
+});
+
+// ============ 原始碼掃描（vuln-agent）分頁 ============
+$(function () {
+    const $pagination = $('#codeTablePagination');
+    const rowsPerPage = 10;
+
+    let currentSearch = '';
+    let currentSeverities = $('.code-severity-filter:checked').map(function () { return $(this).val(); }).get();
+    let currentStatuses = $('.code-status-filter:checked').map(function () { return $(this).val(); }).get();
+
+    const STATUS_LABELS = {
+        pending: '待處理',
+        confirmed: '已確認',
+        false_positive: '誤判',
+        resolved: '已解決'
+    };
+    const STATUS_BADGES = {
+        pending: 'bg-secondary',
+        confirmed: 'bg-danger',
+        false_positive: 'bg-success',
+        resolved: 'bg-primary'
+    };
+    const SEVERITY_BADGES = {
+        '高': 'bg-danger',
+        '中': 'bg-warning text-dark',
+        '低': 'bg-info text-dark',
+        '資訊': 'bg-secondary'
+    };
+
+    // 分頁渲染函式（與 vulnTable 相同邏輯）
+    function renderCodePagination(total, page) {
+        const totalPages = Math.ceil(total / rowsPerPage);
+        $pagination.empty();
+        if (totalPages <= 1) return;
+
+        let pages = [];
+        if (totalPages <= 7) {
+            for (let i = 0; i < totalPages; i++) pages.push(i);
+        } else {
+            pages.push(0);
+            if (page > 3) pages.push('...');
+            let start = Math.max(1, page - 2);
+            let end = Math.min(totalPages - 2, page + 2);
+            for (let i = start; i <= end; i++) pages.push(i);
+            if (page < totalPages - 4) pages.push('...');
+            pages.push(totalPages - 1);
+        }
+
+        pages.forEach(function (p) {
+            if (p === '...') {
+                $pagination.append('<li class="page-item disabled"><span class="page-link">…</span></li>');
+            } else {
+                $pagination.append(
+                    `<li class="page-item ${p === page ? 'active' : ''}">
+                        <a class="page-link" href="#" data-page="${p}">${p + 1}</a>
+                    </li>`
+                );
+            }
+        });
+
+        $pagination.find('a[data-page]').click(function (e) {
+            e.preventDefault();
+            loadCodeFindings(parseInt($(this).data('page')));
+        });
+    }
+
+    function renderCodeTable(data) {
+        let html = '';
+        if (data && data.length > 0) {
+            data.forEach(function (row) {
+                const statusKey = row.status || 'pending';
+                html += `
+                    <tr class="text-center">
+                        <td class="text-start"><code>${row.file_path}:${row.line_start}</code></td>
+                        <td>${row.source || ''}</td>
+                        <td><small>${row.rule_id || ''}</small></td>
+                        <td class="text-start">${row.title || ''}</td>
+                        <td><span class="badge ${SEVERITY_BADGES[row.severity] || 'bg-secondary'}">${row.severity || '—'}</span></td>
+                        <td>${row.confidence !== null ? parseFloat(row.confidence).toFixed(2) : '—'}</td>
+                        <td><span class="badge ${STATUS_BADGES[statusKey] || 'bg-secondary'}">${STATUS_LABELS[statusKey] || statusKey}</span></td>
+                        <td><small>${row.scanned_at || ''}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-info btn-code-detail" data-id="${row.id}"
+                                data-remediation="${encodeURIComponent(row.remediation || '')}"
+                                data-evidence="${encodeURIComponent(row.evidence || '')}">詳細</button>
+                            <button class="btn btn-sm btn-success btn-code-status" data-id="${row.id}" data-status="confirmed"
+                                ${statusKey === 'confirmed' ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>確認</button>
+                            <button class="btn btn-sm btn-outline-secondary btn-code-status" data-id="${row.id}" data-status="false_positive"
+                                ${statusKey === 'false_positive' ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>誤判</button>
+                            <button class="btn btn-sm btn-primary btn-code-status" data-id="${row.id}" data-status="resolved"
+                                ${statusKey === 'resolved' ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>已解決</button>
+                        </td>
+                    </tr>`;
+            });
+        } else {
+            html = '<tr><td colspan="9" class="text-center">無數據</td></tr>';
+        }
+        $('#codeScanTable tbody').html(html);
+    }
+
+    window.loadCodeSummary = function () {
+        $.ajax({
+            url: 'get_code_summary.php',
+            method: 'GET',
+            dataType: 'json',
+            success: function (res) {
+                const sev = res.severity || {};
+                $('#codeStatTotal').text(res.total ?? '—');
+                $('#codeStatHigh').text(sev['高'] ?? 0);
+                $('#codeStatMid').text(sev['中'] ?? 0);
+                $('#codeStatLow').text((sev['低'] ?? 0) + (sev['資訊'] ?? 0));
+                $('#codeStatPending').text(res.pending ?? 0);
+                $('#codeStatFiles').text(res.affected_files ?? 0);
+                $('#codeSummaryLastScan').text(
+                    res.last_scan ? '最後掃描時間：' + res.last_scan : '尚無掃描紀錄'
+                );
+            },
+            error: function () {
+                showToast('原始碼掃描總覽載入失敗', 'danger');
+            }
+        });
+    };
+
+    window.loadCodeFindings = function (page = 0) {
+        $.ajax({
+            url: 'get_code_findings.php',
+            method: 'GET',
+            data: {
+                page: page,
+                page_size: rowsPerPage,
+                search: currentSearch,
+                severities: currentSeverities.join(','),
+                statuses: currentStatuses.join(',')
+            },
+            dataType: 'json',
+            success: function (res) {
+                renderCodeTable(res.data);
+                renderCodePagination(res.total, page);
+            },
+            error: function () {
+                showToast('原始碼掃描資料載入失敗', 'danger');
+            }
+        });
+    };
+
+    // 搜尋輸入（debounce）
+    let codeSearchDebounce = null;
+    $('#codeSearchInput').on('input', function () {
+        clearTimeout(codeSearchDebounce);
+        const value = $(this).val().trim();
+        codeSearchDebounce = setTimeout(function () {
+            currentSearch = value;
+            loadCodeFindings(0);
+        }, 500);
+    });
+
+    // 嚴重程度 / 狀態篩選
+    $('.code-severity-filter, .code-status-filter').on('change', function () {
+        currentSeverities = $('.code-severity-filter:checked').map(function () { return $(this).val(); }).get();
+        currentStatuses = $('.code-status-filter:checked').map(function () { return $(this).val(); }).get();
+        loadCodeFindings(0);
+    });
+
+    // 詳細 modal
+    $('#codeScanTable').on('click', '.btn-code-detail', function () {
+        const remediation = decodeURIComponent($(this).data('remediation') || '');
+        const evidence = decodeURIComponent($(this).data('evidence') || '');
+        $('#codeDetailRemediation').text(remediation || '（無建議）');
+        $('#codeDetailEvidence').text(evidence || '（無）');
+        $('#codeDetailModal').modal('show');
+    });
+
+    // 狀態變更
+    $('#codeScanTable').on('click', '.btn-code-status', function () {
+        const $btn = $(this);
+        const id = $btn.data('id');
+        const status = $btn.data('status');
+
+        $.ajax({
+            url: 'update_code_status.php',
+            method: 'POST',
+            data: { id: id, status: status },
+            dataType: 'json',
+            success: function (res) {
+                if (res.success) {
+                    showToast('✅ 狀態已更新為「' + (STATUS_LABELS[status] || status) + '」', 'success');
+                    loadCodeFindings(0);
+                    loadCodeSummary();
                 } else {
                     showToast('✗ 更新失敗：' + (res.message || ''), 'danger');
                 }

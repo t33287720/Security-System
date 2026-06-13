@@ -13,12 +13,20 @@ from tools.searchsploit_tools import search_exploits
 from tools.vuln_db import get_conn, ensure_schema, save_finding
 from tools.agent_tools import available_tools, run_tool
 
+from tools.gitleaks_tools import run_gitleaks
+from tools.semgrep_tools import run_semgrep
+from tools.code_db import ensure_code_schema, save_code_finding
+from tools.code_agent_tools import available_tools as code_available_tools, run_tool as code_run_tool
+
 from skills.triage_finding import executor as triage_finding
 from skills.decide_next_action import executor as decide_next_action
+from skills.triage_code_finding import executor as triage_code_finding
 
 CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 CONFIDENCE_FOLLOWUP_THRESHOLD = 0.5
 MAX_REACT_ROUNDS = int(os.getenv("VULN_REACT_MAX_ROUNDS", "2"))
+CODE_REACT_MAX_ROUNDS = int(os.getenv("CODE_REACT_MAX_ROUNDS", os.getenv("VULN_REACT_MAX_ROUNDS", "2")))
+CODE_SCAN_ROOT = os.getenv("CODE_SCAN_ROOT", "/app/repo")
 
 
 def extract_cve(*texts):
@@ -177,6 +185,120 @@ def scan_target(conn, target: str):
     print(f"[vuln-agent] {target} 掃描完成，共 {finding_count} 筆弱點紀錄")
 
 
+def build_code_candidates(repo_path: str) -> list:
+    candidates = []
+    for finding in run_gitleaks(repo_path):
+        candidates.append({"source": "gitleaks", "finding": finding})
+    for finding in run_semgrep(repo_path):
+        candidates.append({"source": "semgrep", "finding": finding})
+    return candidates
+
+
+def triage_code_candidate(candidate: dict) -> dict:
+    finding = candidate["finding"]
+    source = candidate["source"]
+    print(f"[vuln-agent]   - 分析候選原始碼問題（{source}）{finding.get('file')}:{finding.get('line_start')} "
+          f"{finding.get('rule_id')}")
+
+    base_input = {
+        "finding_source": source,
+        "finding": finding,
+        "followup_evidence": [],
+    }
+
+    triage = triage_code_finding.run(base_input)
+    print(f"[vuln-agent]     初步判斷：相關={triage.get('is_relevant')} "
+          f"嚴重程度={triage.get('severity')} 信心={triage.get('confidence')}")
+
+    evidence_log = []
+    round_idx = 0
+    while triage.get("confidence", 0) < CONFIDENCE_FOLLOWUP_THRESHOLD and round_idx < CODE_REACT_MAX_ROUNDS:
+        tools = code_available_tools(finding)
+        decision = decide_next_action.run({
+            **base_input,
+            "triage_result": triage,
+            "evidence_log": evidence_log,
+            "available_tools": tools,
+            "round": round_idx,
+            "max_round": CODE_REACT_MAX_ROUNDS,
+        })
+
+        action = decision.get("action")
+        reason = decision.get("reason", "")
+        print(f"[vuln-agent]     第{round_idx + 1}輪決策：{action}（{reason}）")
+
+        if not action or action == "done":
+            break
+        if action not in {t["action"] for t in tools}:
+            print(f"[vuln-agent]     ⚠ 決策動作不在可用工具清單中，停止補充檢測")
+            break
+
+        params = decision.get("params") or {}
+        result = code_run_tool(action, finding, params)
+        if result is None:
+            print(f"[vuln-agent]     ⚠ 工具執行無結果，停止補充檢測")
+            break
+
+        evidence_log.append({
+            "action": action,
+            "params": params,
+            "result": result,
+            "reason": reason,
+        })
+        base_input["followup_evidence"] = evidence_log
+
+        triage = triage_code_finding.run(base_input)
+        print(f"[vuln-agent]     第{round_idx + 1}輪後重新判斷：相關={triage.get('is_relevant')} "
+              f"嚴重程度={triage.get('severity')} 信心={triage.get('confidence')}")
+        round_idx += 1
+
+    return triage
+
+
+def make_code_finding_record(candidate: dict, triage: dict) -> dict:
+    finding = candidate["finding"]
+    source = candidate["source"]
+
+    return {
+        "file_path": finding.get("file"),
+        "line_start": finding.get("line_start") or 0,
+        "line_end": finding.get("line_end") or 0,
+        "source": source,
+        "rule_id": finding.get("rule_id") or "",
+        "title": finding.get("rule_id") or finding.get("message") or "未命名問題",
+        "severity": triage.get("severity"),
+        "confidence": triage.get("confidence"),
+        "evidence": json.dumps(finding, ensure_ascii=False)[:2000],
+        "remediation": triage.get("remediation"),
+    }
+
+
+def scan_codebase(conn, paths: list):
+    finding_count = 0
+    for repo_path in paths:
+        print(f"[vuln-agent] 開始掃描原始碼目錄 {repo_path}")
+        candidates = build_code_candidates(repo_path)
+        print(f"[vuln-agent] {repo_path} 找到 {len(candidates)} 個候選問題")
+
+        for candidate in candidates:
+            try:
+                triage = triage_code_candidate(candidate)
+            except Exception as e:
+                print(f"[vuln-agent] LLM分析失敗 file={candidate['finding'].get('file')}: {e}")
+                continue
+
+            if not triage.get("is_relevant"):
+                continue
+
+            record = make_code_finding_record(candidate, triage)
+            save_code_finding(conn, record)
+            finding_count += 1
+            print(f"[vuln-agent] 發現原始碼問題 file={record['file_path']}:{record['line_start']} "
+                  f"severity={record['severity']}")
+
+    print(f"[vuln-agent] 原始碼掃描完成，共 {finding_count} 筆紀錄")
+
+
 def seconds_until(daily_time: str) -> float:
     """計算距離下一次指定時間（HH:MM，依容器本地時區）還有多少秒"""
     hour, minute = map(int, daily_time.split(":"))
@@ -187,17 +309,32 @@ def seconds_until(daily_time: str) -> float:
     return (target - now).total_seconds()
 
 
+def get_code_scan_paths() -> list:
+    code_scan_paths = [p.strip() for p in os.getenv("CODE_SCAN_PATHS", "worker,web,vuln-agent").split(",") if p.strip()]
+    return [
+        os.path.join(CODE_SCAN_ROOT, p)
+        for p in code_scan_paths
+        if os.path.isdir(os.path.join(CODE_SCAN_ROOT, p))
+    ]
+
+
 def main():
     targets = [t.strip() for t in os.getenv("VULN_SCAN_TARGETS", "127.0.0.1").split(",") if t.strip()]
     daily_time = os.getenv("VULN_SCAN_DAILY_TIME", "00:00")
     run_once = os.getenv("VULN_SCAN_RUN_ONCE", "false").lower() == "true"
 
+    code_scan_enabled = os.getenv("CODE_SCAN_ENABLED", "true").lower() == "true"
+    code_scan_paths = get_code_scan_paths()
+
     conn = get_conn()
     ensure_schema(conn)
+    ensure_code_schema(conn)
 
     if run_once:
         for target in targets:
             scan_target(conn, target)
+        if code_scan_enabled and code_scan_paths:
+            scan_codebase(conn, code_scan_paths)
         return
 
     while True:
@@ -207,6 +344,8 @@ def main():
         conn = get_conn()  # 重新連線，避免閒置超過 MariaDB wait_timeout 而斷線
         for target in targets:
             scan_target(conn, target)
+        if code_scan_enabled and code_scan_paths:
+            scan_codebase(conn, code_scan_paths)
 
 
 if __name__ == "__main__":

@@ -82,6 +82,16 @@ services:
       - VULN_SCAN_TARGETS=${VULN_SCAN_TARGETS:-127.0.0.1}
       - VULN_SCAN_DAILY_TIME=${VULN_SCAN_DAILY_TIME:-00:00}
       - VULN_REACT_MAX_ROUNDS=${VULN_REACT_MAX_ROUNDS:-2}
+      - CODE_SCAN_ENABLED=${CODE_SCAN_ENABLED:-true}
+      - CODE_SCAN_PATHS=${CODE_SCAN_PATHS:-worker,web,vuln-agent}
+      - CODE_SCAN_ROOT=/app/repo
+      - CODE_REACT_MAX_ROUNDS=${CODE_REACT_MAX_ROUNDS:-2}
+    volumes:
+      # 原始碼掃描（gitleaks/semgrep）唯讀掛載：僅掛載原始碼目錄，
+      # 不掛載 repo 根目錄（避免暴露 .env / .git / config/security_hosts.json）
+      - ./worker:/app/repo/worker:ro
+      - ./web:/app/repo/web:ro
+      - ./vuln-agent:/app/repo/vuln-agent:ro
     restart: unless-stopped
 
 networks:

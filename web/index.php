@@ -41,6 +41,7 @@ require_once __DIR__ . '/config/db_security.php';
         <button id="showIpToday"   class="nav-tab">今日封鎖</button>
         <button id="showAIAnalyze" class="nav-tab">Log 分析</button>
         <button id="showVulnScan"  class="nav-tab">弱點掃描</button>
+        <button id="showCodeScan"  class="nav-tab">原始碼掃描</button>
     </nav>
 
     <!-- ===== Modals ===== -->
@@ -143,6 +144,26 @@ require_once __DIR__ . '/config/db_security.php';
                     <p id="vulnDetailRemediation" style="white-space:pre-wrap;"></p>
                     <p class="mb-1"><strong>掃描證據：</strong></p>
                     <pre id="vulnDetailEvidence" style="white-space:pre-wrap;font-family:'Consolas',monospace;font-size:0.78rem;background:#f8f9fa;padding:0.75rem;border-radius:4px;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="codeDetailModal" tabindex="-1" aria-labelledby="codeDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="codeDetailModalLabel">原始碼弱點詳細資訊</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="font-size:0.85rem;">
+                    <p class="mb-1"><strong>修補建議：</strong></p>
+                    <p id="codeDetailRemediation" style="white-space:pre-wrap;"></p>
+                    <p class="mb-1"><strong>掃描證據：</strong></p>
+                    <pre id="codeDetailEvidence" style="white-space:pre-wrap;font-family:'Consolas',monospace;font-size:0.78rem;background:#f8f9fa;padding:0.75rem;border-radius:4px;"></pre>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
@@ -680,6 +701,92 @@ require_once __DIR__ . '/config/db_security.php';
             <div class="p-3" style="border-top:1px solid var(--border);background:#fafbfd;">
                 <nav>
                     <ul class="pagination pagination-sm justify-content-center mb-0" id="vulnTablePagination"></ul>
+                </nav>
+            </div>
+        </div>
+
+        <!-- ====== Panel: 原始碼掃描 ====== -->
+        <div id="codeScanTableContainer" class="panel-card" style="display:none;">
+            <div class="panel-header">
+                <span class="panel-title">原始碼掃描</span>
+                <span id="codeSummaryLastScan" style="font-size:0.75rem;color:var(--muted);">Source Code Scan (gitleaks + semgrep + gemma3:27b)</span>
+            </div>
+
+            <!-- Summary Stat Cards -->
+            <div class="today-stat-row">
+                <div class="today-stat-card">
+                    <div class="today-stat-label">問題總筆數</div>
+                    <div class="today-stat-value" id="codeStatTotal">—</div>
+                    <div class="today-stat-sub">所有掃描紀錄</div>
+                </div>
+                <div class="today-stat-card today-stat-card--red">
+                    <div class="today-stat-label">高風險</div>
+                    <div class="today-stat-value" id="codeStatHigh">—</div>
+                    <div class="today-stat-sub">建議優先處理</div>
+                </div>
+                <div class="today-stat-card today-stat-card--orange">
+                    <div class="today-stat-label">中風險</div>
+                    <div class="today-stat-value" id="codeStatMid">—</div>
+                    <div class="today-stat-sub">建議排程修補</div>
+                </div>
+                <div class="today-stat-card today-stat-card--gray">
+                    <div class="today-stat-label">低風險 / 資訊</div>
+                    <div class="today-stat-value" id="codeStatLow">—</div>
+                    <div class="today-stat-sub">可持續觀察</div>
+                </div>
+                <div class="today-stat-card today-stat-card--blue">
+                    <div class="today-stat-label">待處理項目</div>
+                    <div class="today-stat-value" id="codeStatPending">—</div>
+                    <div class="today-stat-sub">尚未標記狀態</div>
+                </div>
+                <div class="today-stat-card today-stat-card--red">
+                    <div class="today-stat-label">受影響檔案</div>
+                    <div class="today-stat-value" id="codeStatFiles">—</div>
+                    <div class="today-stat-sub">高 / 中風險檔案數</div>
+                </div>
+            </div>
+
+            <!-- Search & Filters -->
+            <div class="filter-bar">
+                <input type="text" id="codeSearchInput" class="search-input" placeholder="搜尋 檔案路徑 / 規則 / 標題...">
+                <div class="filter-divider"></div>
+                <div class="filter-group">
+                    <label><input type="checkbox" class="code-severity-filter" value="高" checked> 高</label>
+                    <label><input type="checkbox" class="code-severity-filter" value="中" checked> 中</label>
+                    <label><input type="checkbox" class="code-severity-filter" value="低" checked> 低</label>
+                    <label><input type="checkbox" class="code-severity-filter" value="資訊" checked> 資訊</label>
+                </div>
+                <div class="filter-divider"></div>
+                <div class="filter-group">
+                    <label><input type="checkbox" class="code-status-filter" value="pending" checked> 待處理</label>
+                    <label><input type="checkbox" class="code-status-filter" value="confirmed" checked> 已確認</label>
+                    <label><input type="checkbox" class="code-status-filter" value="false_positive"> 誤判</label>
+                    <label><input type="checkbox" class="code-status-filter" value="resolved"> 已解決</label>
+                </div>
+            </div>
+
+            <div class="sys-table-wrap">
+                <table id="codeScanTable" class="table table-striped table-bordered align-middle mb-0">
+                    <thead class="table-dark text-center">
+                        <tr>
+                            <th>檔案路徑:行號</th>
+                            <th>來源</th>
+                            <th>規則</th>
+                            <th>標題</th>
+                            <th>嚴重程度</th>
+                            <th>信心度</th>
+                            <th>狀態</th>
+                            <th>掃描時間</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="p-3" style="border-top:1px solid var(--border);background:#fafbfd;">
+                <nav>
+                    <ul class="pagination pagination-sm justify-content-center mb-0" id="codeTablePagination"></ul>
                 </nav>
             </div>
         </div>
