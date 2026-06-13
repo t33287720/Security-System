@@ -18,9 +18,15 @@ from tools.semgrep_tools import run_semgrep
 from tools.code_db import ensure_code_schema, save_code_finding
 from tools.code_agent_tools import available_tools as code_available_tools, run_tool as code_run_tool
 
+from tools.report_db import (
+    ensure_report_schema, get_latest_report, collect_findings_snapshot,
+    build_report_stats, build_top_findings, save_report,
+)
+
 from skills.triage_finding import executor as triage_finding
 from skills.decide_next_action import executor as decide_next_action
 from skills.triage_code_finding import executor as triage_code_finding
+from skills.generate_report import executor as generate_report
 
 CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 CONFIDENCE_FOLLOWUP_THRESHOLD = 0.5
@@ -299,6 +305,32 @@ def scan_codebase(conn, paths: list):
     print(f"[vuln-agent] 原始碼掃描完成，共 {finding_count} 筆紀錄")
 
 
+def generate_scan_report(conn):
+    """彙整本輪掃描後 vuln_findings + code_findings 的現況，
+    與上一份報告比對增量（新增/已解決），交由 LLM 產生摘要後寫入 scan_reports"""
+    print("[vuln-agent] 開始產生本輪掃描報告")
+    previous = get_latest_report(conn)
+    snapshot = collect_findings_snapshot(conn)
+    stats = build_report_stats(snapshot, previous)
+    top_findings = build_top_findings(snapshot)
+
+    report = generate_report.run({
+        "total": stats["total"],
+        "severity": stats["severity"],
+        "new_count": stats["new_count"],
+        "resolved_count": stats["resolved_count"],
+        "previous_total": stats["previous_total"],
+        "previous_generated_at": str(previous["generated_at"]) if previous else None,
+        "top_findings": top_findings,
+    })
+
+    save_report(conn, report.get("summary", ""), report.get("highlights", []), stats, top_findings)
+    print(f"[vuln-agent] 報告完成：共 {stats['total']} 筆（高{stats['severity']['高']}/"
+          f"中{stats['severity']['中']}/低{stats['severity']['低']}/資訊{stats['severity']['資訊']}），"
+          f"新增 {stats['new_count']} 筆，已解決 {stats['resolved_count']} 筆")
+    print(f"[vuln-agent] 摘要：{report.get('summary', '')}")
+
+
 def seconds_until(daily_time: str) -> float:
     """計算距離下一次指定時間（HH:MM，依容器本地時區）還有多少秒"""
     hour, minute = map(int, daily_time.split(":"))
@@ -329,12 +361,14 @@ def main():
     conn = get_conn()
     ensure_schema(conn)
     ensure_code_schema(conn)
+    ensure_report_schema(conn)
 
     if run_once:
         for target in targets:
             scan_target(conn, target)
         if code_scan_enabled and code_scan_paths:
             scan_codebase(conn, code_scan_paths)
+        generate_scan_report(conn)
         return
 
     while True:
@@ -346,6 +380,7 @@ def main():
             scan_target(conn, target)
         if code_scan_enabled and code_scan_paths:
             scan_codebase(conn, code_scan_paths)
+        generate_scan_report(conn)
 
 
 if __name__ == "__main__":

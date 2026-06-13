@@ -28,9 +28,9 @@ function showToast(message, type = 'info', duration = 3000) {
 // 表格切換
 $(document).ready(function () {
     // 所有的分頁按鈕 ID
-    const TAB_BUTTONS = ['#showElk', '#showIpRisk', '#showIpToday', '#showAIAnalyze', '#showVulnScan', '#showCodeScan'];
+    const TAB_BUTTONS = ['#showElk', '#showIpRisk', '#showIpToday', '#showAIAnalyze', '#showVulnScan', '#showCodeScan', '#showScanReport'];
     // 所有的表格容器 ID
-    const TAB_CONTAINERS = ['#elkTableContainer', '#ipRiskTableContainer', '#ipTodayTableContainer', '#aiAnalyzeContainer', '#vulnScanTableContainer', '#codeScanTableContainer'];
+    const TAB_CONTAINERS = ['#elkTableContainer', '#ipRiskTableContainer', '#ipTodayTableContainer', '#aiAnalyzeContainer', '#vulnScanTableContainer', '#codeScanTableContainer', '#scanReportContainer'];
     // 分頁 ID 與標題的對應關係
     const TITLES = {
         '#showElk': 'GAI伺服器安全防護系統日誌檢視',
@@ -38,7 +38,8 @@ $(document).ready(function () {
         '#showIpToday': '今日封鎖名單',
         '#showAIAnalyze': 'Log分析',
         '#showVulnScan': '弱點掃描',
-        '#showCodeScan': '原始碼掃描'
+        '#showCodeScan': '原始碼掃描',
+        '#showScanReport': '掃描報告'
     };
 
     /**
@@ -94,6 +95,12 @@ $(document).ready(function () {
         switchTab('#showCodeScan', '#codeScanTableContainer');
         loadCodeFindings(0);
         loadCodeSummary();
+    });
+
+    $('#showScanReport').click(function (e) {
+        e.preventDefault();
+        switchTab('#showScanReport', '#scanReportContainer');
+        loadScanReport();
     });
 
     // AI 分析區內已知攻擊 tab
@@ -1945,4 +1952,75 @@ $(function () {
             }
         });
     });
+});
+
+// ============ 掃描報告（vuln-agent）分頁 ============
+$(function () {
+    const SEVERITY_BADGES = {
+        '高': 'bg-danger',
+        '中': 'bg-warning text-dark',
+        '低': 'bg-info text-dark',
+        '資訊': 'bg-secondary'
+    };
+    const TYPE_LABELS = {
+        vuln: '網路弱點',
+        code: '原始碼問題'
+    };
+
+    window.loadScanReport = function () {
+        $.ajax({
+            url: 'get_scan_report.php',
+            method: 'GET',
+            dataType: 'json',
+            success: function (res) {
+                if (!res.exists) {
+                    $('#reportGeneratedAt').text('尚無報告');
+                    $('#reportSummary').text('尚未產生過掃描報告，請等待下一輪排程掃描（或手動觸發一次掃描）完成。');
+                    $('#reportHighlights').empty();
+                    $('#reportTopFindingsTable tbody').html('<tr><td colspan="5" class="text-center">無數據</td></tr>');
+                    ['Total', 'High', 'Mid', 'Low', 'New', 'Resolved'].forEach(function (k) {
+                        $('#reportStat' + k).text('—');
+                    });
+                    $('#reportStatTotalDiff').html('&nbsp;');
+                    return;
+                }
+
+                const sev = res.severity || {};
+                $('#reportGeneratedAt').text('產生時間：' + res.generated_at);
+                $('#reportSummary').text(res.summary || '（無摘要）');
+                $('#reportStatTotal').text(res.total ?? '—');
+                $('#reportStatHigh').text(sev['高'] ?? 0);
+                $('#reportStatMid').text(sev['中'] ?? 0);
+                $('#reportStatLow').text((sev['低'] ?? 0) + (sev['資訊'] ?? 0));
+                $('#reportStatNew').text(res.new_count ?? 0);
+                $('#reportStatResolved').text(res.resolved_count ?? 0);
+
+                const diff = (res.total ?? 0) - (res.previous_total ?? 0);
+                const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
+                $('#reportStatTotalDiff').text(`較上次 ${res.previous_total ?? 0} 筆（${diffStr}）`);
+
+                let highlightsHtml = '';
+                (res.highlights || []).forEach(function (h) {
+                    highlightsHtml += `<li>${h}</li>`;
+                });
+                $('#reportHighlights').html(highlightsHtml || '<li class="text-muted">（無）</li>');
+
+                let rowsHtml = '';
+                (res.top_findings || []).forEach(function (f) {
+                    rowsHtml += `
+                        <tr class="text-center">
+                            <td>${TYPE_LABELS[f.type] || f.type}</td>
+                            <td class="text-start"><code>${f.location || ''}</code></td>
+                            <td class="text-start">${f.title || ''}</td>
+                            <td><span class="badge ${SEVERITY_BADGES[f.severity] || 'bg-secondary'}">${f.severity || '—'}</span></td>
+                            <td>${f.confidence !== null && f.confidence !== undefined ? parseFloat(f.confidence).toFixed(2) : '—'}</td>
+                        </tr>`;
+                });
+                $('#reportTopFindingsTable tbody').html(rowsHtml || '<tr><td colspan="5" class="text-center">無數據</td></tr>');
+            },
+            error: function () {
+                showToast('掃描報告載入失敗', 'danger');
+            }
+        });
+    };
 });

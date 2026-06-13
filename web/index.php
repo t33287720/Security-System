@@ -42,6 +42,7 @@ require_once __DIR__ . '/config/db_security.php';
         <button id="showAIAnalyze" class="nav-tab">Log 分析</button>
         <button id="showVulnScan"  class="nav-tab">弱點掃描</button>
         <button id="showCodeScan"  class="nav-tab">原始碼掃描</button>
+        <button id="showScanReport" class="nav-tab">掃描報告</button>
     </nav>
 
     <!-- ===== Modals ===== -->
@@ -788,6 +789,67 @@ require_once __DIR__ . '/config/db_security.php';
                 <nav>
                     <ul class="pagination pagination-sm justify-content-center mb-0" id="codeTablePagination"></ul>
                 </nav>
+            </div>
+        </div>
+
+        <!-- ====== Panel: 掃描報告 ====== -->
+        <div id="scanReportContainer" class="panel-card" style="display:none;">
+            <div class="panel-header">
+                <span class="panel-title">掃描報告</span>
+                <span id="reportGeneratedAt" style="font-size:0.75rem;color:var(--muted);">尚無報告</span>
+            </div>
+
+            <!-- Summary Stat Cards -->
+            <div class="today-stat-row">
+                <div class="today-stat-card">
+                    <div class="today-stat-label">未結案問題總數</div>
+                    <div class="today-stat-value" id="reportStatTotal">—</div>
+                    <div class="today-stat-sub" id="reportStatTotalDiff">&nbsp;</div>
+                </div>
+                <div class="today-stat-card today-stat-card--red">
+                    <div class="today-stat-label">高風險</div>
+                    <div class="today-stat-value" id="reportStatHigh">—</div>
+                </div>
+                <div class="today-stat-card today-stat-card--orange">
+                    <div class="today-stat-label">中風險</div>
+                    <div class="today-stat-value" id="reportStatMid">—</div>
+                </div>
+                <div class="today-stat-card today-stat-card--gray">
+                    <div class="today-stat-label">低風險 / 資訊</div>
+                    <div class="today-stat-value" id="reportStatLow">—</div>
+                </div>
+                <div class="today-stat-card today-stat-card--blue">
+                    <div class="today-stat-label">本次新增</div>
+                    <div class="today-stat-value" id="reportStatNew">—</div>
+                </div>
+                <div class="today-stat-card">
+                    <div class="today-stat-label">已解決</div>
+                    <div class="today-stat-value" id="reportStatResolved">—</div>
+                </div>
+            </div>
+
+            <div class="p-3">
+                <h6>摘要</h6>
+                <p id="reportSummary" style="white-space:pre-wrap;">尚未產生過掃描報告，請等待下一輪排程掃描（或手動觸發一次掃描）完成。</p>
+
+                <h6 class="mt-3">優先關注項目</h6>
+                <ul id="reportHighlights" class="mb-3"></ul>
+
+                <h6 class="mt-3">本次重點清單（依嚴重程度排序）</h6>
+                <div class="sys-table-wrap">
+                    <table id="reportTopFindingsTable" class="table table-striped table-bordered align-middle mb-0">
+                        <thead class="table-dark text-center">
+                            <tr>
+                                <th>類型</th>
+                                <th>位置</th>
+                                <th>標題</th>
+                                <th>嚴重程度</th>
+                                <th>信心度</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
