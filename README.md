@@ -21,6 +21,13 @@ flowchart TD
     Worker -->|同步封鎖規則| Fw["ipset / iptables<br/>(host kernel，含遠端主機 SSH)"]
     Web["web<br/>(Docker)"] -->|查詢/管理風險狀態與白名單| DB
     Web -->|查詢原始 log| ES
+
+    VulnAgent["vuln-agent<br/>(Docker)"] -->|"nmap + searchsploit<br/>掃描 VULN_SCAN_TARGETS"| Target(["自身服務"])
+    VulnAgent -->|"gitleaks + semgrep<br/>掃描原始碼（唯讀掛載）"| SrcCode["worker / web / vuln-agent<br/>原始碼"]
+    VulnAgent -->|LLM triage / ReAct 補充檢測| Ollama
+    VulnAgent -->|"寫入 vuln_findings /<br/>code_findings / scan_reports"| DB
+    Web -->|查詢弱點掃描與報告| DB
+
     User([管理人員]) -->|儀表板 / 審核 / 白名單管理| Web
 ```
 

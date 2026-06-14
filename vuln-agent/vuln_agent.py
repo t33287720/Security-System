@@ -9,6 +9,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(BASE_DIR, "Prompt_Chaining"))
 
 from tools.nmap_tools import run_recon
+from tools.bind_tools import get_listen_bindings, classify_exposure, EXPOSURE_LABELS
 from tools.searchsploit_tools import search_exploits
 from tools.vuln_db import get_conn, ensure_schema, save_finding
 from tools.agent_tools import available_tools, run_tool
@@ -78,6 +79,7 @@ def triage_candidate(target: str, port_info: dict, candidate: dict) -> dict:
         "service": port_info.get("service"),
         "product": port_info.get("product"),
         "version": port_info.get("version"),
+        "network_exposure": EXPOSURE_LABELS.get(port_info.get("exposure"), EXPOSURE_LABELS["unknown"]),
         "finding_source": candidate["source"],
         "finding": candidate["finding"],
         "followup_evidence": [],
@@ -146,6 +148,9 @@ def make_finding_record(target: str, port_info: dict, candidate: dict, triage: d
         cve_codes = finding.get("cve_codes") or []
         cve_id = cve_codes[0] if cve_codes else None
 
+    exposure_note = EXPOSURE_LABELS.get(port_info.get("exposure"), EXPOSURE_LABELS["unknown"])
+    evidence = f"[網路暴露範圍] {exposure_note}\n{evidence}"
+
     return {
         "target": target,
         "port": port_info.get("port"),
@@ -166,11 +171,15 @@ def scan_target(conn, target: str):
     recon = run_recon(target)
     print(f"[vuln-agent] 偵測到 {len(recon.get('ports', []))} 個開放 port")
 
+    bindings = get_listen_bindings()
+
     finding_count = 0
     for port_info in recon.get("ports", []):
+        port_info["exposure"] = classify_exposure(port_info["port"], bindings)
         candidates = build_candidates(port_info)
         print(f"[vuln-agent] port {port_info['port']}（{port_info.get('service')} "
-              f"{port_info.get('product') or ''} {port_info.get('version') or ''}）"
+              f"{port_info.get('product') or ''} {port_info.get('version') or ''}，"
+              f"{EXPOSURE_LABELS[port_info['exposure']]}）"
               f"找到 {len(candidates)} 個候選弱點")
         for candidate in candidates:
             try:

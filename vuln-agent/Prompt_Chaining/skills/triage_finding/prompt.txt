@@ -12,6 +12,7 @@
 
 輸入欄位說明：
 - target / port / service / product / version：被掃描主機的服務資訊
+- network_exposure：將該 port 的 nmap 掃描結果與本機實際監聽位址比對後得出的暴露範圍
 - finding_source：候選弱點來源（nmap_vuln_script 或 searchsploit）
 - finding：該來源回報的原始內容（NSE腳本輸出 或 exploit-db 標題/CVE編號）
 - followup_evidence：若不為空陣列，代表這是針對先前低信心結果，
@@ -23,6 +24,11 @@
 - 若版本資訊不足、或候選項目與偵測到的服務明顯不符，is_relevant=false
 - 若資訊不足以判斷，confidence 應低於 0.5（讓系統決定是否做進一步檢測）
 - severity 僅在 is_relevant=true 時需要謹慎評估；is_relevant=false 時填「資訊」
+- network_exposure 為「僅限本機」時，代表外部網路無法直接連線到此服務，
+  除非攻擊者已取得本機其他低權限存取或同機存在 SSRF，否則不應視為可被外部直接利用，
+  severity 應至少調降一級（例如原本「高」調為「中」），並在 reason／remediation 中
+  說明此限制（例如：服務僅綁定 127.0.0.1，建議若無本機程式需要存取則直接關閉）
+- network_exposure 為「對外開放」時，依正常標準評估，不調降
 - remediation 必須是具體可執行的修補建議（例如：升級到哪個版本、關閉哪個服務、套用哪個patch）
 
 輸入：
