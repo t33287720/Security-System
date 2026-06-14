@@ -9,13 +9,13 @@ class Skill:
         self.prompt = open(os.path.join(skill_path, "prompt.txt"), encoding="utf-8").read()
         self.schema = json.load(open(os.path.join(skill_path, "schema.json"), encoding="utf-8"))
 
-    def run(self, input_data, temperature=0.1):
+    def run(self, input_data, temperature=0.1, num_ctx=None):
         prompt = self.prompt.replace(
             "{{input}}",
             json.dumps(input_data, ensure_ascii=False, indent=2)
         )
 
-        result = call_llm(prompt, temperature=temperature)
+        result = call_llm(prompt, temperature=temperature, num_ctx=num_ctx)
 
         if not result:
             raise Exception("LLM 回傳錯誤")

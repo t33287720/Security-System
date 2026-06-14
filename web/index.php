@@ -710,7 +710,7 @@ require_once __DIR__ . '/config/db_security.php';
         <div id="codeScanTableContainer" class="panel-card" style="display:none;">
             <div class="panel-header">
                 <span class="panel-title">原始碼掃描</span>
-                <span id="codeSummaryLastScan" style="font-size:0.75rem;color:var(--muted);">Source Code Scan (gitleaks + semgrep + gemma3:27b)</span>
+                <span id="codeSummaryLastScan" style="font-size:0.75rem;color:var(--muted);">Source Code Scan (gitleaks + semgrep + gemma3:27b 業務邏輯審查)</span>
             </div>
 
             <!-- Summary Stat Cards -->

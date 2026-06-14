@@ -17,14 +17,16 @@ def parse_json(text):
     return None
 
 
-def call_llm(prompt, temperature=0.1):
+def call_llm(prompt, temperature=0.1, num_ctx=None):
+    options = {"temperature": temperature}
+    if num_ctx:
+        options["num_ctx"] = num_ctx
+
     payload = {
         "model": MODEL,
         "prompt": prompt,
         "stream": False,
-        "options": {
-            "temperature": temperature
-        }
+        "options": options
     }
 
     resp = requests.post(OLLAMA_URL, json=payload, timeout=180)

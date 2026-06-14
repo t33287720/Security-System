@@ -16,6 +16,7 @@ from tools.agent_tools import available_tools, run_tool
 
 from tools.gitleaks_tools import run_gitleaks
 from tools.semgrep_tools import run_semgrep
+from tools.llm_review_tools import run_llm_logic_review
 from tools.code_db import ensure_code_schema, save_code_finding
 from tools.code_agent_tools import available_tools as code_available_tools, run_tool as code_run_tool
 
@@ -34,6 +35,7 @@ CONFIDENCE_FOLLOWUP_THRESHOLD = 0.5
 MAX_REACT_ROUNDS = int(os.getenv("VULN_REACT_MAX_ROUNDS", "2"))
 CODE_REACT_MAX_ROUNDS = int(os.getenv("CODE_REACT_MAX_ROUNDS", os.getenv("VULN_REACT_MAX_ROUNDS", "2")))
 CODE_SCAN_ROOT = os.getenv("CODE_SCAN_ROOT", "/app/repo")
+LLM_LOGIC_REVIEW_ENABLED = os.getenv("LLM_LOGIC_REVIEW_ENABLED", "true").lower() == "true"
 
 
 def extract_cve(*texts):
@@ -206,6 +208,9 @@ def build_code_candidates(repo_path: str) -> list:
         candidates.append({"source": "gitleaks", "finding": finding})
     for finding in run_semgrep(repo_path):
         candidates.append({"source": "semgrep", "finding": finding})
+    if LLM_LOGIC_REVIEW_ENABLED:
+        for finding in run_llm_logic_review(repo_path):
+            candidates.append({"source": "llm_logic", "finding": finding})
     return candidates
 
 
@@ -274,13 +279,18 @@ def make_code_finding_record(candidate: dict, triage: dict) -> dict:
     finding = candidate["finding"]
     source = candidate["source"]
 
+    if source == "llm_logic":
+        title = finding.get("message") or finding.get("rule_id") or "未命名問題"
+    else:
+        title = finding.get("rule_id") or finding.get("message") or "未命名問題"
+
     return {
         "file_path": finding.get("file"),
         "line_start": finding.get("line_start") or 0,
         "line_end": finding.get("line_end") or 0,
         "source": source,
         "rule_id": finding.get("rule_id") or "",
-        "title": finding.get("rule_id") or finding.get("message") or "未命名問題",
+        "title": title,
         "severity": triage.get("severity"),
         "confidence": triage.get("confidence"),
         "evidence": json.dumps(finding, ensure_ascii=False)[:2000],

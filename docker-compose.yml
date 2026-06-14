@@ -86,6 +86,11 @@ services:
       - CODE_SCAN_PATHS=${CODE_SCAN_PATHS:-worker,web,vuln-agent}
       - CODE_SCAN_ROOT=/app/repo
       - CODE_REACT_MAX_ROUNDS=${CODE_REACT_MAX_ROUNDS:-2}
+      # 原始碼掃描第三候選來源：LLM 直接審查程式碼業務邏輯（權限控制/IDOR等），
+      # 試點結果：第二意見 triage 對此來源幾乎無過濾效果（110/110 全判相關，
+      # 抽查 3 筆皆為誤判），暫時關閉，等 triage prompt 強化後再開
+      - LLM_LOGIC_REVIEW_ENABLED=${LLM_LOGIC_REVIEW_ENABLED:-false}
+      - LLM_LOGIC_REVIEW_MAX_BYTES=${LLM_LOGIC_REVIEW_MAX_BYTES:-12000}
     volumes:
       # 原始碼掃描（gitleaks/semgrep）唯讀掛載：僅掛載原始碼目錄，
       # 不掛載 repo 根目錄（避免暴露 .env / .git / config/security_hosts.json）
