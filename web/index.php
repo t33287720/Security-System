@@ -90,9 +90,12 @@ require_once __DIR__ . '/config/db_security.php';
                             <div id="behaviorAnalysis"></div>
                         </div>
                         <div class="col-md-6">
-                            <h6 class="fw-bold text-center mb-3" style="font-size:0.82rem;color:#1a3050;">原始 Log</h6>
+                            <div class="d-flex justify-content-center align-items-center mb-3" style="position:relative;">
+                                <h6 class="fw-bold" style="font-size:0.82rem;color:#1a3050;margin:0;">原始 Log</h6>
+                                <button type="button" id="btnRawLogDetail" class="btn btn-outline-secondary btn-sm" style="position:absolute;right:0;font-size:0.7rem;padding:1px 8px;">詳細</button>
+                            </div>
                             <div id="rawLog"
-                                style="white-space:pre-wrap;font-family:'Consolas','Fira Code',monospace;font-size:0.75rem;max-height:400px;overflow-y:auto;background:#f8fafc;color:#1c2a3a;padding:12px;border-radius:6px;border:1px solid #d0d7e3;line-height:1.6;"></div>
+                                style="white-space:pre-wrap;font-family:'Consolas','Fira Code',monospace;font-size:0.75rem;max-height:600px;overflow-y:auto;background:#f8fafc;color:#1c2a3a;padding:12px;border-radius:6px;border:1px solid #d0d7e3;line-height:1.6;"></div>
                         </div>
                     </div>
                 </div>

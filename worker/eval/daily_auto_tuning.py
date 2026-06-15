@@ -101,8 +101,34 @@ def detect_trend(values):
     return 'stable'
 
 
+def _update_rag_index():
+    """RAG 索引增量更新（把昨日新增的 FN/FP 案例加入 ChromaDB）。"""
+    log("更新 RAG ChromaDB 索引...")
+    try:
+        import sys as _sys
+        _sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+        from config.settings import load_config
+        import mariadb
+        from eval.rag_store import build_index
+        cfg_db = load_config()
+        conn = mariadb.connect(
+            host=cfg_db['db_host'], user=cfg_db['db_user'],
+            password=cfg_db['db_password'], database=cfg_db['db_name'],
+            autocommit=True
+        )
+        build_index(conn, verbose=False)
+        conn.close()
+        log("RAG 索引更新完成")
+    except Exception as e:
+        log(f"⚠ RAG 索引更新失敗：{e}")
+
+
 def main():
     log("=== daily_auto_tuning 開始 ===")
+
+    # RAG 索引更新與下方 fn_limit/fp_limit 調整邏輯彼此獨立，
+    # 必須放在所有提早 return 之前，否則資料不足等情況會導致索引永遠不更新
+    _update_rag_index()
 
     # ── Idempotency：同一天只執行一次
     cfg   = read_tuning_config()
@@ -177,27 +203,6 @@ def main():
     last_action = note
     write_tuning_config(fn_limit, fp_limit, mcc_trend, recall_trend,
                         last_mcc, last_recall, note, last_action)
-
-    # ── RAG 索引增量更新（把昨日新增的 FN/FP 案例加入 ChromaDB）
-    log("更新 RAG ChromaDB 索引...")
-    try:
-        import sys as _sys
-        _sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from config.settings import load_config
-        import mariadb
-        from eval.rag_store import build_index
-        cfg_db = load_config()
-        conn = mariadb.connect(
-            host=cfg_db['db_host'], user=cfg_db['db_user'],
-            password=cfg_db['db_password'], database=cfg_db['db_name'],
-            autocommit=True
-        )
-        build_index(conn, verbose=False)
-        conn.close()
-        log("RAG 索引更新完成")
-    except Exception as e:
-        log(f"⚠ RAG 索引更新失敗：{e}")
-        log("⚠ fn_limit/fp_limit 已調整但 RAG 索引未同步，本次調整效果可能不完整")
 
     log("=== daily_auto_tuning 完成 ===\n")
 

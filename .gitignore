@@ -8,6 +8,7 @@ config/mysql/*_dump.sql
 
 # ── Generated / runtime data ──────────────────────────────────
 worker/data/
+worker/eval/output/
 
 # ── Old archived scripts ──────────────────────────────────────
 worker/elk_api_old*.py

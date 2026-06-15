@@ -712,7 +712,7 @@ $('#ipRiskTable').on('click', '.btn-view-detail', function () {
                 rawLogHtml += `<div style="color:#9ca3af;">無原始紀錄</div>`;
             }
 
-            $("#rawLog").html(rawLogHtml);
+            $("#rawLog").html(rawLogHtml).data('full-html', rawLogHtml).data('ip', ip);
             $('#ipDetailModal').modal('show');
         },
         error: function (xhr, status, error) {
@@ -720,6 +720,16 @@ $('#ipRiskTable').on('click', '.btn-view-detail', function () {
             alert('載入詳細資訊失敗');
         }
     });
+});
+
+// 原始 Log「詳細」按鈕：以較大的彈窗顯示完整原始 Log
+$('#btnRawLogDetail').on('click', function () {
+    const ip = $('#rawLog').data('ip') || '';
+    $('#fullLogModal .modal-title').text('原始 Log 詳細內容 — ' + ip);
+    $('#fullLogModal .modal-body').html(
+        `<div style="white-space:pre-wrap;font-family:'Consolas','Fira Code',monospace;font-size:0.8rem;background:#f8fafc;color:#1c2a3a;padding:12px;border-radius:6px;border:1px solid #d0d7e3;line-height:1.6;">${$('#rawLog').data('full-html') || ''}</div>`
+    );
+    $('#fullLogModal').modal('show');
 });
 
 // 251125 RU 防護日誌更新
