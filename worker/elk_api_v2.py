@@ -14,7 +14,7 @@ from tools.firewall.ipset_tools import (ensure_ipset)
 from tools.es.es_tools import (get_index_range, update_index_if_needed, search_new_logs)
 from tools.utils.ip_utils import (wildcard_to_cidr, is_ip_in_list)
 from tools.llm.ollama_tools import (analyze_message,)
-from tools.logs.log_tools import (format_logs, build_syslog, build_zeeklog, handle_logs)
+from tools.logs.log_tools import (format_logs, build_syslog, build_zeeklog, build_weirdlog, build_noticelog, handle_logs)
 from tools.security.security_tools import (expire_warning_ips, is_in_cooldown, build_ip_lists, update_ip_activity, maybe_sync_ipset,)
 from tools.security.policy import (save_analysis_result,)
 from tools.system.system_tools import (heartbeat,)
@@ -175,6 +175,7 @@ def main():
             src = hit.get("_source", {})
             message = src.get("message")
             zeek = src.get("event", {}).get("original")
+            dataset = src.get("event", {}).get("dataset", "")
             client_ip = src.get("client_ip")
             src_ip = src.get("src_ip")
             dst_ip = src.get("dst_ip")
@@ -224,7 +225,7 @@ def main():
                 if EVAL_MODE:
                     if ip not in benign_eval_cache:
                         benign_eval_cache[ip] = {
-                            "syslog": [], "zeeklog": [],
+                            "syslog": [], "zeeklog": [], "weirdlog": [], "noticelog": [],
                             "host_name": host_name,
                             "last_time": time_str,
                             "local_ip": local_ip, "direction": direction
@@ -233,7 +234,12 @@ def main():
                         if message:
                             benign_eval_cache[ip]["syslog"].append(message)
                         if zeek:
-                            benign_eval_cache[ip]["zeeklog"].append(zeek)
+                            if dataset == "zeek.weird":
+                                benign_eval_cache[ip]["weirdlog"].append(zeek)
+                            elif dataset == "zeek.notice":
+                                benign_eval_cache[ip]["noticelog"].append(zeek)
+                            else:
+                                benign_eval_cache[ip]["zeeklog"].append(zeek)
                         benign_eval_cache[ip]["last_time"] = time_str
                 continue
 
@@ -244,6 +250,8 @@ def main():
                 ip_cache[ip] = {
                     "syslog": [],
                     "zeeklog": [],
+                    "weirdlog": [],
+                    "noticelog": [],
                     "host_name": host_name,
                     "last_time": time_str,
                     "local_ip": local_ip,
@@ -254,7 +262,12 @@ def main():
                 ip_cache[ip]["syslog"].append(message)
 
             if zeek:
-                ip_cache[ip]["zeeklog"].append(zeek)
+                if dataset == "zeek.weird":
+                    ip_cache[ip]["weirdlog"].append(zeek)
+                elif dataset == "zeek.notice":
+                    ip_cache[ip]["noticelog"].append(zeek)
+                else:
+                    ip_cache[ip]["zeeklog"].append(zeek)
 
         # ==================================================
         # 5️⃣ process per IP
@@ -264,8 +277,10 @@ def main():
             # -------------------------
             # tool: insert logs
             # -------------------------
-            handle_logs(conn, data["syslog"], build_syslog, "syslog", ip, data)
-            handle_logs(conn, data["zeeklog"], build_zeeklog, "zeeklog", ip, data)
+            handle_logs(conn, data["syslog"],    build_syslog,    "syslog",    ip, data)
+            handle_logs(conn, data["zeeklog"],   build_zeeklog,   "zeeklog",   ip, data)
+            handle_logs(conn, data["weirdlog"],  build_weirdlog,  "weirdlog",  ip, data)
+            handle_logs(conn, data["noticelog"], build_noticelog, "noticelog", ip, data)
             # -------------------------
             # tool: update activity
             # -------------------------
@@ -330,10 +345,16 @@ def main():
             # ==================================================
             # 6️⃣ AI analyze
             # ==================================================
-            syslog_rows = get_ip_logs(conn, ip, "syslog")
-            zeek_rows = get_ip_logs(conn, ip, "zeeklog")
-            syslog_text = format_logs(syslog_rows)
-            zeek_text = format_logs(zeek_rows)
+            syslog_rows  = get_ip_logs(conn, ip, "syslog")
+            zeek_rows    = get_ip_logs(conn, ip, "zeeklog")
+            weird_rows   = get_ip_logs(conn, ip, "weirdlog")
+            notice_rows  = get_ip_logs(conn, ip, "noticelog")
+            syslog_text  = format_logs(syslog_rows)
+            zeek_text    = "\n".join(filter(None, [
+                format_logs(zeek_rows),
+                format_logs(weird_rows),
+                format_logs(notice_rows),
+            ]))
 
             total_log = f"{syslog_text}\n{zeek_text}"
             # print("分析的log總合:",total_log)
@@ -342,7 +363,7 @@ def main():
             known_attacks = get_known_attacks(conn)
 
             syslog_texts = [r['log_content'] for r in syslog_rows]
-            zeek_texts   = [r['log_content'] for r in zeek_rows]
+            zeek_texts   = [r['log_content'] for r in zeek_rows + weird_rows + notice_rows]
 
             analysis = analyze_message(
                 total_log,
@@ -363,14 +384,21 @@ def main():
                     if count >= 20:
                         # DB 有足夠歷史 log，擴大 limit 重分析
                         print(f"[RETRY] IP={ip} confidence={confidence:.2f}，24h log={count}，擴大 limit 重分析")
-                        syslog_rows_ex = get_ip_logs(conn, ip, "syslog", limit=50)
-                        zeek_rows_ex   = get_ip_logs(conn, ip, "zeeklog", limit=50)
+                        syslog_rows_ex  = get_ip_logs(conn, ip, "syslog",    limit=50)
+                        zeek_rows_ex    = get_ip_logs(conn, ip, "zeeklog",   limit=50)
+                        weird_rows_ex   = get_ip_logs(conn, ip, "weirdlog",  limit=50)
+                        notice_rows_ex  = get_ip_logs(conn, ip, "noticelog", limit=50)
+                        zeek_text_ex    = "\n".join(filter(None, [
+                            format_logs(zeek_rows_ex),
+                            format_logs(weird_rows_ex),
+                            format_logs(notice_rows_ex),
+                        ]))
                         analysis_ex = analyze_message(
-                            f"{format_logs(syslog_rows_ex)}\n{format_logs(zeek_rows_ex)}",
+                            f"{format_logs(syslog_rows_ex)}\n{zeek_text_ex}",
                             ip, data["local_ip"], data["direction"],
                             known_attacks, OLLAMA_URL,
                             syslog_list=[r['log_content'] for r in syslog_rows_ex],
-                            zeek_list=[r['log_content'] for r in zeek_rows_ex],
+                            zeek_list=[r['log_content'] for r in zeek_rows_ex + weird_rows_ex + notice_rows_ex],
                         )
                         if analysis_ex and analysis_ex.get("confidence", 0) > confidence:
                             print(f"[RETRY] 信心度提升 {confidence:.2f} → {analysis_ex.get('confidence'):.2f}")
@@ -417,8 +445,10 @@ def main():
         if EVAL_MODE:
             # ── 先把本 batch 白名單 logs 存進 DB（讓 step 7 能讀 24h 歷史）
             for ip, data in benign_eval_cache.items():
-                handle_logs(conn, data["syslog"], build_syslog, "syslog", ip, data)
-                handle_logs(conn, data["zeeklog"], build_zeeklog, "zeeklog", ip, data)
+                handle_logs(conn, data["syslog"],    build_syslog,    "syslog",    ip, data)
+                handle_logs(conn, data["zeeklog"],   build_zeeklog,   "zeeklog",   ip, data)
+                handle_logs(conn, data["weirdlog"],  build_weirdlog,  "weirdlog",  ip, data)
+                handle_logs(conn, data["noticelog"], build_noticelog, "noticelog", ip, data)
 
             # 查 DB 累積數，只有 attack 多於 benign 時才補充 benign 樣本
             n_attack_db, n_benign_db = get_eval_label_counts(conn)

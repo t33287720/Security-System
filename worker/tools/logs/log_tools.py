@@ -32,7 +32,39 @@ def build_zeeklog(log_text, meta):
         if i < len(parts)
     ]
 
-    return "[來源: Zeek 日誌]\n" + "\n".join(parsed_lines)
+    return "[來源: Zeek conn.log]\n" + "\n".join(parsed_lines)
+
+
+def build_weirdlog(log_text, meta):
+    # weird.log: ts uid id.orig_h id.orig_p id.resp_h id.resp_p name addl notice peer source
+    fields = [
+        "時間戳", "會話ID", "來源IP", "來源Port", "目的IP", "目的Port",
+        "異常類型", "補充資訊", "觸發Notice", "記錄節點", "來源"
+    ]
+    parts = log_text.strip().split("\t")
+    parsed_lines = [
+        f"{field}: {parts[i]}"
+        for i, field in enumerate(fields)
+        if i < len(parts)
+    ]
+    return "[來源: Zeek weird.log]\n" + "\n".join(parsed_lines)
+
+
+def build_noticelog(log_text, meta):
+    # notice.log: ts uid id.orig_h id.orig_p id.resp_h id.resp_p fuid file_mime_type
+    #             file_desc proto note msg sub src dst p n peer_descr actions suppress_for
+    fields = [
+        "時間戳", "會話ID", "來源IP", "來源Port", "目的IP", "目的Port",
+        "檔案UID", "檔案類型", "檔案描述", "協議", "警告類型", "警告訊息",
+        "子訊息", "來源", "目的", "目的Port", "計數", "節點描述", "觸發動作", "抑制時間"
+    ]
+    parts = log_text.strip().split("\t")
+    parsed_lines = [
+        f"{field}: {parts[i]}"
+        for i, field in enumerate(fields)
+        if i < len(parts) and parts[i] != "-"
+    ]
+    return "[來源: Zeek notice.log]\n" + "\n".join(parsed_lines)
 
 def handle_logs(conn, logs, builder, log_type, ip, data):
 
