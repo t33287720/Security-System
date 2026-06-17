@@ -43,6 +43,7 @@ require_once __DIR__ . '/config/db_security.php';
         <button id="showVulnScan"  class="nav-tab">弱點掃描</button>
         <button id="showCodeScan"  class="nav-tab">原始碼掃描</button>
         <button id="showScanReport" class="nav-tab">掃描報告</button>
+        <a href="swagger.php" class="nav-tab" style="margin-left:auto;text-decoration:none;">API 文件</a>
     </nav>
 
     <!-- ===== Modals ===== -->
