@@ -148,7 +148,7 @@ def plot_confusion(m, threshold, scope, out_path):
         for j in range(2):
             ax.text(j, i, str(cm[i, j]), ha='center', va='center',
                     color='white' if cm[i, j] > cm.max()/2 else 'black', fontsize=14)
-    ax.set_title(f'Confusion Matrix  scope={scope_label}  threshold={threshold:.2f}')
+    ax.set_title('')
     plt.tight_layout()
     plt.savefig(out_path, dpi=150)
     plt.close()
