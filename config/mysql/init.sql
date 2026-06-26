@@ -89,3 +89,14 @@ CREATE TABLE IF NOT EXISTS users (
   password   VARCHAR(255) NOT NULL,
   created_at DATETIME     DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ── System settings log (append-only, latest row wins) ────────
+CREATE TABLE IF NOT EXISTS system_settings (
+  `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `key`        VARCHAR(64)  NOT NULL,
+  `value`      VARCHAR(255) NOT NULL,
+  `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_key (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO system_settings (`key`, `value`) VALUES ('ai_analysis_enabled', '1');

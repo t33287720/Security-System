@@ -9,9 +9,10 @@ from datetime import datetime, timedelta
 import urllib3
 import mariadb
 from tools.db.db_tools import (get_ip_log_count_24h, cleanup_blacklist, get_ip_logs, get_known_attacks,
-                               is_new_attack_type, insert_pending_attack, insert_llm_violation,)
+                               is_new_attack_type, insert_pending_attack, insert_llm_violation,
+                               get_system_setting,)
 from tools.firewall.ipset_tools import (ensure_ipset)
-from tools.es.es_tools import (get_index_range, update_index_if_needed, search_new_logs, search_ip_logs_historical)
+from tools.es.es_tools import (get_index_range, update_index_if_needed, search_new_logs)
 from tools.utils.ip_utils import (wildcard_to_cidr, is_ip_in_list)
 from tools.llm.ollama_tools import (analyze_message,)
 from tools.logs.log_tools import (format_logs, build_syslog, build_zeeklog, build_weirdlog, build_noticelog, handle_logs)
@@ -340,6 +341,10 @@ def main():
             
             if is_in_cooldown(conn, ip, 5):
                 print(f"[SKIP] {ip} 5分鐘內已分析")
+                continue
+
+            if get_system_setting(conn, 'ai_analysis_enabled', '1') != '1':
+                print(f"[SKIP] AI 分析已暫停（系統設定）")
                 continue
 
             # ==================================================

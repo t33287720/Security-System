@@ -311,6 +311,12 @@ def insert_llm_violation(conn, ip, branch, original_level, attempted_level):
     conn.commit()
 
 
+def get_system_setting(conn, key: str, default: str = None) -> str:
+    with conn.cursor(dictionary=True) as cursor:
+        row = fetch_one(cursor, "SELECT `value` FROM system_settings WHERE `key` = %s ORDER BY id DESC LIMIT 1", (key,))
+        return row['value'] if row else default
+
+
 def cleanup_blacklist(conn):
     with conn.cursor(dictionary=True) as cursor:
         cursor.execute("""
