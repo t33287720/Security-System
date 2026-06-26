@@ -66,7 +66,8 @@ def parse_llm_json_response(text):
     return {"raw_response": text}
 
 def analyze_message(message, other_ip, local_ip, direction, known_attacks, OLLAMA_URL,
-                    syslog_list=None, zeek_list=None, eval_hints=None):
+                    syslog_list=None, zeek_list=None, eval_hints=None,
+                    historical_message=None):
     role_info_json = {
         "local_ip": local_ip,
         "external_ip": other_ip,
@@ -95,6 +96,23 @@ def analyze_message(message, other_ip, local_ip, direction, known_attacks, OLLAM
     hints_parts = [p for p in [eval_hints, rag_section] if p]
     eval_hints_section = ("\n" + "\n".join(hints_parts) + "\n") if hints_parts else ""
 
+    historical_section = ""
+    if historical_message:
+        historical_section = f"""
+【歷史補充資料】
+以下為同一 IP 過去（時間不定，可能為數日至數月前）的歷史 log，用於輔助判斷行為是否持續。
+
+使用規則：
+- 歷史資料「不得」單獨決定 danger_level，必須配合當前資料
+- 若歷史行為與當前行為模式一致 → 可提升 confidence
+- 若歷史與當前行為矛盾 → 以當前資料為準，歷史資料忽略
+- 歷史資料只能「確認」已在當前資料中觀察到的攻擊特徵，不能「新增」當前資料沒有的攻擊依據
+- 歷史資料只能提升 confidence，不能改變 danger_level；danger_level 必須完全由當前資料的行為模式決定
+
+{historical_message}
+
+"""
+
     prompt = f"""你是資安行為分析引擎，使用繁體中文輸出。
 {eval_hints_section}
 {stats_hint}【連線資訊】
@@ -107,9 +125,9 @@ def analyze_message(message, other_ip, local_ip, direction, known_attacks, OLLAM
   → external_ip 為連線目標；若目標為已知服務（CDN、NTP、更新伺服器），視為正常；
     若本地大量外連多個不同目標，才考慮本地受害或被用作跳板
 
-【Log 內容】
+【Log 內容（當前，近24小時）】
 {message}
-
+{historical_section}
 【已知攻擊手法（語意參考）】
 {known_attack_str}
 

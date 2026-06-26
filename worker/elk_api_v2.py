@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 import urllib3
 import mariadb
 from tools.db.db_tools import (get_ip_log_count_24h, cleanup_blacklist, get_ip_logs, get_known_attacks,
-                               is_new_attack_type, insert_pending_attack,)
+                               is_new_attack_type, insert_pending_attack, insert_llm_violation,)
 from tools.firewall.ipset_tools import (ensure_ipset)
-from tools.es.es_tools import (get_index_range, update_index_if_needed, search_new_logs)
+from tools.es.es_tools import (get_index_range, update_index_if_needed, search_new_logs, search_ip_logs_historical)
 from tools.utils.ip_utils import (wildcard_to_cidr, is_ip_in_list)
 from tools.llm.ollama_tools import (analyze_message,)
 from tools.logs.log_tools import (format_logs, build_syslog, build_zeeklog, build_weirdlog, build_noticelog, handle_logs)
@@ -381,34 +381,93 @@ def main():
             if analysis:
                 confidence = analysis.get("confidence", 1.0)
                 if confidence < 0.7:
+                    cutoff_hist = datetime.now() - timedelta(hours=24)
+
+                    def _build_hist_text(rows_list):
+                        lines = []
+                        for r in rows_list:
+                            if r.get("created_at") and r["created_at"] < cutoff_hist and r.get("log_content"):
+                                ts = r["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+                                lines.append(f"[{ts}] {r['log_content']}")
+                        return "\n".join(lines)
+
                     if count >= 20:
                         # DB 有足夠歷史 log，擴大 limit 重分析
                         print(f"[RETRY] IP={ip} confidence={confidence:.2f}，24h log={count}，擴大 limit 重分析")
-                        syslog_rows_ex  = get_ip_logs(conn, ip, "syslog",    limit=50)
-                        zeek_rows_ex    = get_ip_logs(conn, ip, "zeeklog",   limit=50)
-                        weird_rows_ex   = get_ip_logs(conn, ip, "weirdlog",  limit=50)
-                        notice_rows_ex  = get_ip_logs(conn, ip, "noticelog", limit=50)
-                        zeek_text_ex    = "\n".join(filter(None, [
-                            format_logs(zeek_rows_ex),
-                            format_logs(weird_rows_ex),
-                            format_logs(notice_rows_ex),
-                        ]))
-                        analysis_ex = analyze_message(
-                            f"{format_logs(syslog_rows_ex)}\n{zeek_text_ex}",
-                            ip, data["local_ip"], data["direction"],
-                            known_attacks, OLLAMA_URL,
-                            syslog_list=[r['log_content'] for r in syslog_rows_ex],
-                            zeek_list=[r['log_content'] for r in zeek_rows_ex + weird_rows_ex + notice_rows_ex],
+                        all_rows_ex = (
+                            get_ip_logs(conn, ip, "syslog",    limit=50) +
+                            get_ip_logs(conn, ip, "zeeklog",   limit=50) +
+                            get_ip_logs(conn, ip, "weirdlog",  limit=50) +
+                            get_ip_logs(conn, ip, "noticelog", limit=50)
                         )
-                        if analysis_ex and analysis_ex.get("confidence", 0) > confidence:
-                            print(f"[RETRY] 信心度提升 {confidence:.2f} → {analysis_ex.get('confidence'):.2f}")
-                            analysis = analysis_ex
+                        hist_text_ex = _build_hist_text(all_rows_ex)
+                        if not hist_text_ex.strip():
+                            print(f"[RETRY] 無歷史資料可補充，保留原始結果")
                         else:
-                            print(f"[RETRY] 信心度未改善，保留原始結果")
+                            analysis_ex = analyze_message(
+                                total_log,
+                                ip, data["local_ip"], data["direction"],
+                                known_attacks, OLLAMA_URL,
+                                syslog_list=syslog_texts,
+                                zeek_list=zeek_texts,
+                                eval_hints=_eval_hints,
+                                historical_message=hist_text_ex,
+                            )
+                            if (analysis_ex
+                                    and analysis_ex.get("confidence", 0) > confidence
+                                    and analysis_ex.get("danger_level") == analysis.get("danger_level")):
+                                print(f"[RETRY] 信心度提升 {confidence:.2f} → {analysis_ex.get('confidence'):.2f}")
+                                analysis = analysis_ex
+                            else:
+                                if (analysis_ex
+                                        and analysis_ex.get("danger_level") != analysis.get("danger_level")):
+                                    print(f"[RETRY] LLM 違規：danger_level {analysis.get('danger_level')} → {analysis_ex.get('danger_level')}，拒絕採用")
+                                    insert_llm_violation(conn, ip, "RETRY",
+                                                         analysis.get("danger_level", ""),
+                                                         analysis_ex.get("danger_level", ""))
+                                else:
+                                    print(f"[RETRY] 信心度未改善，保留原始結果")
                     else:
-                        # log 真的太少，不儲存，等下次 poll 累積更多再判斷
-                        print(f"[LOW-DATA] IP={ip} confidence={confidence:.2f}，24h log 僅 {count} 筆，延後分析")
-                        continue
+                        # 24h 資料不足，從 DB 撈 24h 以前的歷史 log 作為補充參考
+                        all_rows_ld = (
+                            get_ip_logs(conn, ip, "syslog",    limit=50) +
+                            get_ip_logs(conn, ip, "zeeklog",   limit=50) +
+                            get_ip_logs(conn, ip, "weirdlog",  limit=50) +
+                            get_ip_logs(conn, ip, "noticelog", limit=50)
+                        )
+                        hist_text_ld = _build_hist_text(all_rows_ld)
+                        if hist_text_ld.strip():
+                            print(f"[LOW-DATA] IP={ip} confidence={confidence:.2f}，補入歷史 log，重新分析")
+                            analysis_ld = analyze_message(
+                                total_log,
+                                ip,
+                                data["local_ip"],
+                                data["direction"],
+                                known_attacks,
+                                OLLAMA_URL,
+                                syslog_list=syslog_texts,
+                                zeek_list=zeek_texts,
+                                eval_hints=_eval_hints,
+                                historical_message=hist_text_ld,
+                            )
+                            if (analysis_ld
+                                    and analysis_ld.get("confidence", 0) > confidence
+                                    and analysis_ld.get("danger_level") == analysis.get("danger_level")):
+                                print(f"[LOW-DATA] 歷史資料提升信心度 {confidence:.2f} → {analysis_ld.get('confidence'):.2f}")
+                                analysis = analysis_ld
+                            else:
+                                if (analysis_ld
+                                        and analysis_ld.get("danger_level") != analysis.get("danger_level")):
+                                    print(f"[LOW-DATA] LLM 違規：danger_level {analysis.get('danger_level')} → {analysis_ld.get('danger_level')}，拒絕採用")
+                                    insert_llm_violation(conn, ip, "LOW-DATA",
+                                                         analysis.get("danger_level", ""),
+                                                         analysis_ld.get("danger_level", ""))
+                                else:
+                                    print(f"[LOW-DATA] 歷史資料未能提升信心度，延後分析")
+                                continue
+                        else:
+                            print(f"[LOW-DATA] IP={ip} confidence={confidence:.2f}，無歷史資料，延後分析")
+                            continue
 
             print("\n==================== AI 分析結果 ====================")
             print(f"IP: {ip}")

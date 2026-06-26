@@ -118,6 +118,12 @@ $(document).ready(function () {
         loadEvalResults();
     });
 
+    // LLM 違規 tab
+    $(document).on('click', '#violationsTab', function (e) {
+        e.preventDefault();
+        loadViolations();
+    });
+
     // 收合箭頭方向（監聽 Bootstrap collapse 事件）
     document.addEventListener('show.bs.collapse', function(e) {
         const header = document.querySelector(`[data-bs-target="#${e.target.id}"]`);
@@ -1363,6 +1369,42 @@ function initTooltips(container) {
 
 function fmtPct(v) { return v !== null && v !== undefined ? (v * 100).toFixed(1) + '%' : '—'; }
 function fmtNum(v) { return v !== null && v !== undefined ? parseFloat(v).toFixed(4)      : '—'; }
+
+function loadViolations() {
+    const tbody = document.getElementById('violationsBody');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center"><div class="spinner-border spinner-border-sm"></div> 載入中...</td></tr>';
+
+    fetch('get_llm_violations.php')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) { tbody.innerHTML = '<tr><td colspan="5" class="text-danger p-3">載入失敗</td></tr>'; return; }
+
+            const s = data.stats;
+            document.getElementById('vStatTotal').textContent   = s.total    ?? '0';
+            document.getElementById('vStatRetry').textContent   = s.n_retry   ?? '0';
+            document.getElementById('vStatLowData').textContent = s.n_low_data ?? '0';
+
+            const badge = document.getElementById('violationsCount');
+            if (s.total > 0) { badge.textContent = s.total; badge.style.display = ''; }
+            else { badge.style.display = 'none'; }
+
+            const LEVEL_BADGE = { '危險': 'bg-danger', '可疑': 'bg-warning text-dark', '正常': 'bg-success' };
+            let html = '';
+            (data.records || []).forEach(r => {
+                const origBadge = LEVEL_BADGE[r.original_level]  || 'bg-secondary';
+                const attemBadge = LEVEL_BADGE[r.attempted_level] || 'bg-secondary';
+                html += `<tr class="text-center">
+                    <td>${r.ip}</td>
+                    <td><span class="badge bg-secondary">${r.branch}</span></td>
+                    <td><span class="badge ${origBadge}">${r.original_level}</span></td>
+                    <td><span class="badge ${attemBadge}">${r.attempted_level}</span></td>
+                    <td>${r.created_at}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = html || '<tr><td colspan="5" class="text-center text-muted">尚無違規紀錄</td></tr>';
+        })
+        .catch(() => { tbody.innerHTML = '<tr><td colspan="5" class="text-danger">載入錯誤</td></tr>'; });
+}
 
 function loadEvalResults() {
     // 每次載入都刷新趨勢圖（加 ts 避免快取，確保拿到最新產出的 PNG）

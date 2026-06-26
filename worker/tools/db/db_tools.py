@@ -299,6 +299,18 @@ def update_ip_status(conn, ip, now, host_name):
 # CLEANUP
 # =========================================================
 
+def insert_llm_violation(conn, ip, branch, original_level, attempted_level):
+    with conn.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO llm_violations (ip, branch, original_level, attempted_level)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (ip, branch, original_level, attempted_level)
+        )
+    conn.commit()
+
+
 def cleanup_blacklist(conn):
     with conn.cursor(dictionary=True) as cursor:
         cursor.execute("""

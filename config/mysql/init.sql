@@ -70,6 +70,18 @@ CREATE TABLE IF NOT EXISTS eval_results (
   INDEX idx_ip (ip)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ── LLM violation log ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS llm_violations (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  ip              VARCHAR(45)  NOT NULL,
+  branch          VARCHAR(20)  NOT NULL COMMENT 'RETRY 或 LOW-DATA',
+  original_level  VARCHAR(20)  NOT NULL,
+  attempted_level VARCHAR(20)  NOT NULL,
+  created_at      DATETIME     DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_ip (ip),
+  INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ── Web login users ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
   id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
