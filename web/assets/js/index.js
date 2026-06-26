@@ -269,6 +269,26 @@ function validateIpOrPattern(ip) {
 $(document).ready(function () {
     var ipInputModal = new bootstrap.Modal(document.getElementById('ipInputModal'));
 
+    // 👉 解除誤封鎖（黑名單/LLM黑名單 且非已知惡意IP）
+    $('#btnUnblockNonKnown').click(function () {
+        if (!confirm('確定要將所有非「已知惡意IP」的黑名單與 LLM 黑名單封鎖暫時移除（live_status = 0）？')) return;
+        $.ajax({
+            url: 'unblock_non_known_malicious.php',
+            method: 'POST',
+            success: function (res) {
+                if (res.success) {
+                    showToast('已解除 ' + res.affected + ' 筆誤封鎖', 'success');
+                    setTimeout(function () { location.reload(); }, 1500);
+                } else {
+                    showToast('操作失敗：' + (res.message || '未知錯誤'), 'danger');
+                }
+            },
+            error: function () {
+                showToast('請求失敗，請稍後再試', 'danger');
+            }
+        });
+    });
+
     // 👉 黑名單
     $('#btnAddBlacklist').click(function () {
         $('#ipInputModalLabel').text('加入黑名單');

@@ -28,6 +28,11 @@ require_once __DIR__ . '/config/db_security.php';
             <span style="font-size:0.7rem;font-weight:400;color:rgba(255,255,255,0.4);margin-left:6px;">Security Monitoring Platform</span>
         </div>
         <div class="sys-meta">
+            <button id="aiToggleBtn" onclick="toggleAiAnalysis()"
+                style="font-size:0.75rem;padding:3px 10px;border-radius:4px;border:none;cursor:pointer;font-weight:600;">
+                載入中...
+            </button>
+            <span style="opacity:0.3">|</span>
             <span id="headerClock">--:--:--</span>
             <span style="opacity:0.3">|</span>
             <span>Asia/Taipei</span>
@@ -227,6 +232,7 @@ require_once __DIR__ . '/config/db_security.php';
             <div class="panel-header">
                 <span class="panel-title">IP 狀態管理</span>
                 <div class="d-flex gap-2">
+                    <button id="btnUnblockNonKnown" class="btn btn-warning btn-sm">解除誤封鎖</button>
                     <button id="btnAddWhitelist" class="btn btn-success btn-sm">+ 白名單</button>
                     <button id="btnAddBlacklist" class="btn btn-danger btn-sm">+ 黑名單</button>
                 </div>
@@ -925,6 +931,40 @@ require_once __DIR__ . '/config/db_security.php';
         if (el) el.textContent = d + '  ' + t;
         setTimeout(tick, 1000);
     })();
+
+    function updateAiToggleBtn(enabled) {
+        const btn = document.getElementById('aiToggleBtn');
+        if (!btn) return;
+        if (enabled) {
+            btn.textContent = 'AI 分析：開啟';
+            btn.style.background = '#28a745';
+            btn.style.color = '#fff';
+        } else {
+            btn.textContent = 'AI 分析：暫停';
+            btn.style.background = '#dc3545';
+            btn.style.color = '#fff';
+        }
+    }
+
+    function toggleAiAnalysis() {
+        fetch('get_system_setting.php?key=ai_analysis_enabled')
+            .then(r => r.json())
+            .then(data => {
+                const current = data.value === '1';
+                const next = current ? '0' : '1';
+                const fd = new FormData();
+                fd.append('key', 'ai_analysis_enabled');
+                fd.append('value', next);
+                return fetch('set_system_setting.php', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(res => { if (res.success) updateAiToggleBtn(next === '1'); });
+            });
+    }
+
+    fetch('get_system_setting.php?key=ai_analysis_enabled')
+        .then(r => r.json())
+        .then(data => updateAiToggleBtn(data.value === '1'))
+        .catch(() => updateAiToggleBtn(true));
     </script>
 </body>
 </html>
