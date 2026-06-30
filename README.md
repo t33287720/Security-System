@@ -215,10 +215,18 @@ sudo ipset create blacklistv4 hash:net maxelem 1000000
 sudo ipset create blackfulllistv4 hash:net maxelem 1000000
 sudo ipset create whitelistv4 hash:net maxelem 1000000
 
-# 讓 iptables 套用 ipset 黑名單（首次）
-sudo iptables -I INPUT -m set --match-set blackfulllistv4 src -j DROP
-sudo iptables -I INPUT -m set --match-set blacklistv4 src -j DROP
-sudo iptables -I INPUT -m set --match-set whitelistv4 src -j ACCEPT
+# 讓 iptables 依序套用 ipset 規則（首次；用 -A 依下列順序附加，
+# 順序即生效優先順序，越上面優先權越高）：
+# 1. 白名單一律放行
+# 2. blackfulllistv4（黑名單／高信心度完全封鎖）：全埠無例外擋下
+# 3-4. blacklistv4（LLM黑名單／低信心度暫時封鎖）：保留 80、443 等
+#      常見服務埠放行，避免短暫誤判造成正常服務（如網站、API）中斷
+# 5. blacklistv4 其餘埠一律擋下
+sudo iptables -A INPUT -m set --match-set whitelistv4 src -j ACCEPT
+sudo iptables -A INPUT -m set --match-set blackfulllistv4 src -j DROP
+sudo iptables -A INPUT -p tcp --dport 80  -m set --match-set blacklistv4 src -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 443 -m set --match-set blacklistv4 src -j ACCEPT
+sudo iptables -A INPUT -m set --match-set blacklistv4 src -j DROP
 ```
 
 #### nginx（反向代理）
