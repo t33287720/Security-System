@@ -311,15 +311,10 @@ require_once __DIR__ . '/config/db_security.php';
                     <div class="today-stat-value" id="statPublic">—</div>
                     <div class="today-stat-sub">Threat Intel Feed</div>
                 </div>
-                <div class="today-stat-card today-stat-card--blue today-stat-btn" data-stat="llmHigh">
-                    <div class="today-stat-label">LLM 高信心封鎖</div>
-                    <div class="today-stat-value" id="statLLMHigh">—</div>
-                    <div class="today-stat-sub">系統研判 &gt;80%</div>
-                </div>
-                <div class="today-stat-card today-stat-card--blue today-stat-btn" style="border-left-color:#60a5fa;" data-stat="llmMid">
-                    <div class="today-stat-label">LLM 中信心封鎖</div>
-                    <div class="today-stat-value" id="statLLMMid">—</div>
-                    <div class="today-stat-sub">系統研判 ≤80%</div>
+                <div class="today-stat-card today-stat-card--blue today-stat-btn" data-stat="llm">
+                    <div class="today-stat-label">LLM 黑名單封鎖</div>
+                    <div class="today-stat-value" id="statLLM">—</div>
+                    <div class="today-stat-sub">軟封鎖 80/443 放行，信心度決定解封時間</div>
                 </div>
                 <div class="today-stat-card today-stat-card--orange today-stat-btn" data-stat="repeated">
                     <div class="today-stat-label">重複攻擊 IP</div>

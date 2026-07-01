@@ -1061,8 +1061,7 @@ function refreshDashboard() {
         // ── Stat Cards ────────────────────────────────────────────
         $('#statTotal').text(todayData.totalBlocked);
         $('#statPublic').text(todayData.publicBlacklisted);
-        $('#statLLMHigh').text(todayData.llmHighBlocked);
-        $('#statLLMMid').text(todayData.llmMidBlocked);
+        $('#statLLM').text(todayData.llmBlocked);
         $('#statRepeated').text(todayData.repeatedIPs);
         $('#statSubnets').text(todayData.suspiciousSubnetCount);
 
@@ -1194,8 +1193,7 @@ refreshDashboard();
 const STAT_LABELS = {
     total:   '今日新增封鎖 — 所有封鎖 IP',
     public:  '公開黑名單命中 — Threat Intel Feed',
-    llmHigh: 'LLM 高信心封鎖 — 系統研判 >80%',
-    llmMid:  'LLM 中信心封鎖 — 系統研判 ≤80%',
+    llm:     'LLM 黑名單封鎖 — AI 研判危險（軟封鎖，80/443 放行；信心度 >80% 封鎖 24h，否則 5 分鐘）',
     repeated:'重複攻擊 IP — 今日多筆紀錄',
     subnets: '疑似攻擊網段 — /24 多 IP 命中',
 };
@@ -1220,9 +1218,7 @@ function renderStatDetail(key) {
 
     if (key === 'public') {
         rows = rows.filter(r => (r.attack_type || '').trim() === '已知惡意IP');
-    } else if (key === 'llmHigh') {
-        rows = rows.filter(r => r.status === '黑名單' && (r.attack_type || '').trim() !== '已知惡意IP');
-    } else if (key === 'llmMid') {
+    } else if (key === 'llm') {
         rows = rows.filter(r => r.status === 'LLM黑名單');
     } else if (key === 'repeated') {
         rows = rows.filter(r => (ipCounts[r.ip] || 1) > 1);

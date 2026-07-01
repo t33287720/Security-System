@@ -39,14 +39,15 @@ foreach ($ipTodayList as $row) {
 }
 
 // ── 統計指標 ───────────────────────────────────────────────────
-// status 有兩種黑名單：
-//   '黑名單' + attack_type='已知惡意IP' → 公開黑名單命中（openblacklist_matcher）
-//   '黑名單' + 其他 attack_type         → LLM 高信心（confidence > 0.8）
-//   'LLM黑名單'                         → LLM 中信心（confidence <= 0.8）
+// status 有兩種黑名單，對應 worker/tools/security/policy.py 的分流邏輯：
+//   '黑名單'    → 命中公開威脅情報黑名單的已知惡意 IP（openblacklist_matcher），或人工手動加入
+//                 （blackfulllistv4，全 port 硬封鎖 24 小時）
+//   'LLM黑名單' → AI 研判「危險」一律進此類（不論信心度高低都不會進硬封鎖黑名單）
+//                 （blacklistv4 軟封鎖，80/443 網站流量仍放行；
+//                  信心度僅影響解封時間：>0.8 為 24 小時，否則 5 分鐘）
 $totalBlocked       = count($ipUniqueList);
-$publicBlacklisted  = 0;   // 公開黑名單命中
-$llmHighBlocked     = 0;   // LLM 高信心（黑名單，系統研判）
-$llmMidBlocked      = 0;   // LLM 中信心（LLM黑名單）
+$publicBlacklisted  = 0;   // 公開黑名單命中（attack_type = 已知惡意IP）
+$llmBlocked         = 0;   // LLM 黑名單封鎖（AI 研判危險）
 $repeatedIPs        = 0;
 $attackTypeToday    = [];
 
@@ -55,9 +56,7 @@ foreach ($ipUniqueList as $ip => $row) {
     if ($attackType === '已知惡意IP') {
         $publicBlacklisted++;
     } elseif ($row['status'] === 'LLM黑名單') {
-        $llmMidBlocked++;
-    } else {
-        $llmHighBlocked++;
+        $llmBlocked++;
     }
     if (($ipCounts[$ip] ?? 1) > 1) {
         $repeatedIPs++;
@@ -109,8 +108,7 @@ foreach ($ipUniqueList as $item) {
 echo json_encode([
     'totalBlocked'         => $totalBlocked,
     'publicBlacklisted'    => $publicBlacklisted,
-    'llmHighBlocked'       => $llmHighBlocked,
-    'llmMidBlocked'        => $llmMidBlocked,
+    'llmBlocked'           => $llmBlocked,
     'repeatedIPs'          => $repeatedIPs,
     'suspiciousSubnetCount'=> count($suspiciousSubnets),
     'suspiciousSubnets'    => $suspiciousSubnets,
