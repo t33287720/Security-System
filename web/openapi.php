@@ -140,15 +140,6 @@ $spec = [
             'responses' => $ok,
         ]],
 
-        // ── Log 分析 ──
-        '/analyze_log.php' => ['post' => [
-            'tags' => ['Log 分析'], 'summary' => 'LLM 分析單筆 log',
-            'requestBody' => form_body(['log'], ['direction', 'local_ip', 'other_ip'], [
-                'log' => '原始 log 內容', 'direction' => '流量方向', 'local_ip' => '本地 IP', 'other_ip' => '對端 IP',
-            ]),
-            'responses' => $ok,
-        ]],
-
         // ── 弱點掃描 ──
         '/get_vuln_findings.php' => ['get' => [
             'tags' => ['弱點掃描'], 'summary' => '弱點掃描結果清單',

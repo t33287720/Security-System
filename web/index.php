@@ -404,11 +404,7 @@ require_once __DIR__ . '/config/db_security.php';
             <div class="panel-body p-0">
                 <ul class="nav nav-tabs px-4 pt-2" role="tablist" style="margin-bottom:0;border-bottom:1px solid var(--border);">
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="analyzeTab" data-bs-toggle="tab"
-                            data-bs-target="#analyzePanel" type="button" role="tab">分析新 Log</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="pendingTab" data-bs-toggle="tab"
+                        <button class="nav-link active" id="pendingTab" data-bs-toggle="tab"
                             data-bs-target="#pendingPanel" type="button" role="tab">
                             待審核
                             <span id="pendingCount" class="badge bg-danger ms-1" style="display:none;font-size:0.65rem;"></span>
@@ -433,54 +429,8 @@ require_once __DIR__ . '/config/db_security.php';
 
                 <div class="tab-content p-4">
 
-                    <!-- 分析新 Log -->
-                    <div class="tab-pane fade show active" id="analyzePanel" role="tabpanel">
-                        <div class="row g-4">
-                            <div class="col-md-5">
-                                <div style="font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Log 輸入</div>
-                                <textarea id="logInput" class="form-control" rows="10"
-                                    placeholder="貼上原始 log（Apache / Nginx / Syslog / Zeek 均可）..."></textarea>
-                                <div class="row g-2 mt-2">
-                                    <div class="col-5">
-                                        <input type="text" id="logOtherIp" class="form-control form-control-sm"
-                                            placeholder="外部 IP（選填）">
-                                    </div>
-                                    <div class="col-4">
-                                        <input type="text" id="logLocalIp" class="form-control form-control-sm"
-                                            placeholder="本地 IP（選填）">
-                                    </div>
-                                    <div class="col-3">
-                                        <select id="logDirection" class="form-select form-select-sm">
-                                            <option value="">方向</option>
-                                            <option value="inbound">inbound</option>
-                                            <option value="outbound">outbound</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="d-flex gap-2 mt-3">
-                                    <button id="btnAnalyzeLog" class="btn btn-primary btn-sm">
-                                        執行 LLM 分析
-                                    </button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm"
-                                        onclick="document.getElementById('logInput').value=''">
-                                        清除
-                                    </button>
-                                </div>
-                                <div class="mt-3 p-2 rounded" style="background:#f0f6ff;border:1px solid #bfdbfe;font-size:0.72rem;color:#1e40af;line-height:1.6;">
-                                    輸入單筆或多筆 log，填入連線資訊可提升分析準確度。
-                                </div>
-                            </div>
-                            <div class="col-md-7">
-                                <div style="font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">分析結果</div>
-                                <div id="aiResult" style="min-height:280px;background:#fafbfd;border:1px solid var(--border);border-radius:6px;padding:16px;font-size:0.82rem;line-height:1.75;color:var(--text);">
-                                    <span style="color:var(--muted);">尚未執行分析。</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- 待審核 -->
-                    <div class="tab-pane fade" id="pendingPanel" role="tabpanel">
+                    <div class="tab-pane fade show active" id="pendingPanel" role="tabpanel">
                         <div id="pendingAttacksContainer">
                             <div class="text-center py-5" style="color:var(--muted);font-size:0.82rem;">
                                 <div class="spinner-border spinner-border-sm me-2"></div>載入中...
