@@ -25,11 +25,10 @@ def save_analysis_result(conn, ip, analysis_data, host_name):
     # policy decision（業務邏輯）
     # -------------------------
     if level == "危險":
+        status = "LLM黑名單"
         if confidence > 0.8:
-            status = "黑名單"
             unblock_time = llm_time + timedelta(hours=24)
         else:
-            status = "LLM黑名單"
             unblock_time = llm_time + timedelta(minutes=5)
 
     elif level == "可疑":

@@ -91,6 +91,27 @@ if ! iptables -C INPUT -m set --match-set "$WHITELIST_SET" src -j ACCEPT 2>/dev/
     info "iptables whitelist rule added: ACCEPT $WHITELIST_SET"
 fi
 
+# 硬封鎖：blackfulllistv4 命中（已知惡意 IP）→ 全 port 直接 DROP
+if ! iptables -C INPUT -m set --match-set "$BLACKFULL_SET" src -j DROP 2>/dev/null; then
+    iptables -A INPUT -m set --match-set "$BLACKFULL_SET" src -j DROP
+    info "iptables blackfulllist rule added: DROP $BLACKFULL_SET"
+fi
+
+# 軟封鎖：blacklistv4 命中 → 保留 443/80 可連線（網站本身跑在這兩個 port），其餘 port 才 DROP
+# 注意順序：ACCEPT 443/80 必須排在 DROP 之前，否則會被 DROP 先攔截
+if ! iptables -C INPUT -p tcp --dport 443 -m set --match-set "$BLACKLIST_SET" src -j ACCEPT 2>/dev/null; then
+    iptables -A INPUT -p tcp --dport 443 -m set --match-set "$BLACKLIST_SET" src -j ACCEPT
+    info "iptables blacklist rule added: ACCEPT tcp/443 $BLACKLIST_SET"
+fi
+if ! iptables -C INPUT -p tcp --dport 80 -m set --match-set "$BLACKLIST_SET" src -j ACCEPT 2>/dev/null; then
+    iptables -A INPUT -p tcp --dport 80 -m set --match-set "$BLACKLIST_SET" src -j ACCEPT
+    info "iptables blacklist rule added: ACCEPT tcp/80 $BLACKLIST_SET"
+fi
+if ! iptables -C INPUT -m set --match-set "$BLACKLIST_SET" src -j DROP 2>/dev/null; then
+    iptables -A INPUT -m set --match-set "$BLACKLIST_SET" src -j DROP
+    info "iptables blacklist rule added: DROP $BLACKLIST_SET"
+fi
+
 # ── Step 5: security_hosts.json ───────────────────────────────
 if [[ ! -f config/security_hosts.json ]]; then
     cp config/security_hosts.json.example config/security_hosts.json
