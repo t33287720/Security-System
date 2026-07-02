@@ -30,6 +30,10 @@ EVAL_LOG_THRESHOLD    = 5    # 至少幾筆 log 才執行 eval 分析
 EVAL_COOLDOWN_MIN     = 60   # 同 IP 幾分鐘內不重複 eval
 EVAL_ATTACK_MIN_SRCS  = 2    # attack GT 品質門檻：至少命中幾個獨立 blacklist 來源
 
+# danger_level 嚴重程度排序，用於二次判斷（RETRY / LOW-DATA）不一致時的取捨：
+# 兩次判斷矛盾時採信較嚴重的一方，避免防禦系統因為信任第一次判斷而漏放真正的攻擊
+DANGER_SEVERITY = {"正常": 0, "可疑": 1, "危險": 2}
+
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -418,20 +422,21 @@ def main():
                                 eval_hints=_eval_hints,
                                 historical_message=hist_text_ex,
                             )
-                            if (analysis_ex
-                                    and analysis_ex.get("confidence", 0) > confidence
-                                    and analysis_ex.get("danger_level") == analysis.get("danger_level")):
+                            if analysis_ex and analysis_ex.get("danger_level") != analysis.get("danger_level"):
+                                orig_level = analysis.get("danger_level", "")
+                                new_level  = analysis_ex.get("danger_level", "")
+                                print(f"[RETRY] LLM 違規：danger_level {orig_level} → {new_level}")
+                                insert_llm_violation(conn, ip, "RETRY", orig_level, new_level)
+                                if DANGER_SEVERITY.get(new_level, -1) > DANGER_SEVERITY.get(orig_level, -1):
+                                    print(f"[RETRY] 二次判斷風險等級較高，採信較嚴重結果 {orig_level} → {new_level}")
+                                    analysis = analysis_ex
+                                else:
+                                    print(f"[RETRY] 二次判斷風險等級較低，保留原始（較嚴重）結果")
+                            elif analysis_ex and analysis_ex.get("confidence", 0) > confidence:
                                 print(f"[RETRY] 信心度提升 {confidence:.2f} → {analysis_ex.get('confidence'):.2f}")
                                 analysis = analysis_ex
                             else:
-                                if (analysis_ex
-                                        and analysis_ex.get("danger_level") != analysis.get("danger_level")):
-                                    print(f"[RETRY] LLM 違規：danger_level {analysis.get('danger_level')} → {analysis_ex.get('danger_level')}，拒絕採用")
-                                    insert_llm_violation(conn, ip, "RETRY",
-                                                         analysis.get("danger_level", ""),
-                                                         analysis_ex.get("danger_level", ""))
-                                else:
-                                    print(f"[RETRY] 信心度未改善，保留原始結果")
+                                print(f"[RETRY] 信心度未改善，保留原始結果")
                     else:
                         # 24h 資料不足，從 DB 撈 24h 以前的歷史 log 作為補充參考
                         all_rows_ld = (
@@ -455,20 +460,22 @@ def main():
                                 eval_hints=_eval_hints,
                                 historical_message=hist_text_ld,
                             )
-                            if (analysis_ld
-                                    and analysis_ld.get("confidence", 0) > confidence
-                                    and analysis_ld.get("danger_level") == analysis.get("danger_level")):
+                            if analysis_ld and analysis_ld.get("danger_level") != analysis.get("danger_level"):
+                                orig_level = analysis.get("danger_level", "")
+                                new_level  = analysis_ld.get("danger_level", "")
+                                print(f"[LOW-DATA] LLM 違規：danger_level {orig_level} → {new_level}")
+                                insert_llm_violation(conn, ip, "LOW-DATA", orig_level, new_level)
+                                if DANGER_SEVERITY.get(new_level, -1) > DANGER_SEVERITY.get(orig_level, -1):
+                                    print(f"[LOW-DATA] 二次判斷風險等級較高，採信較嚴重結果 {orig_level} → {new_level}，繼續進行封鎖判斷")
+                                    analysis = analysis_ld
+                                else:
+                                    print(f"[LOW-DATA] 二次判斷風險等級較低，資料仍不足，延後分析")
+                                    continue
+                            elif analysis_ld and analysis_ld.get("confidence", 0) > confidence:
                                 print(f"[LOW-DATA] 歷史資料提升信心度 {confidence:.2f} → {analysis_ld.get('confidence'):.2f}")
                                 analysis = analysis_ld
                             else:
-                                if (analysis_ld
-                                        and analysis_ld.get("danger_level") != analysis.get("danger_level")):
-                                    print(f"[LOW-DATA] LLM 違規：danger_level {analysis.get('danger_level')} → {analysis_ld.get('danger_level')}，拒絕採用")
-                                    insert_llm_violation(conn, ip, "LOW-DATA",
-                                                         analysis.get("danger_level", ""),
-                                                         analysis_ld.get("danger_level", ""))
-                                else:
-                                    print(f"[LOW-DATA] 歷史資料未能提升信心度，延後分析")
+                                print(f"[LOW-DATA] 歷史資料未能提升信心度，延後分析")
                                 continue
                         else:
                             print(f"[LOW-DATA] IP={ip} confidence={confidence:.2f}，無歷史資料，延後分析")
