@@ -350,10 +350,13 @@ def main():
             # ==================================================
             # 6️⃣ AI analyze
             # ==================================================
-            syslog_rows  = get_ip_logs(conn, ip, "syslog")
-            zeek_rows    = get_ip_logs(conn, ip, "zeeklog")
-            weird_rows   = get_ip_logs(conn, ip, "weirdlog")
-            notice_rows  = get_ip_logs(conn, ip, "noticelog")
+            # prompt 標籤寫「當前，近24小時」，查詢也要真的卡在 24h 內，
+            # 不然筆數不足時會悄悄往回吃到更久以前的資料，跟標籤名不符
+            cutoff_current = datetime.now() - timedelta(hours=24)
+            syslog_rows  = get_ip_logs(conn, ip, "syslog",    since=cutoff_current)
+            zeek_rows    = get_ip_logs(conn, ip, "zeeklog",   since=cutoff_current)
+            weird_rows   = get_ip_logs(conn, ip, "weirdlog",  since=cutoff_current)
+            notice_rows  = get_ip_logs(conn, ip, "noticelog", since=cutoff_current)
             syslog_text  = format_logs(syslog_rows)
             zeek_text    = "\n".join(filter(None, [
                 format_logs(zeek_rows),

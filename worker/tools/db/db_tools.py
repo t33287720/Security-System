@@ -63,19 +63,29 @@ def get_raw_ip_lists(conn):
 
 
 # IP logs
-def get_ip_logs(conn, ip, log_type, limit=20):
+def get_ip_logs(conn, ip, log_type, limit=20, since=None):
+    """
+    since 給定時，只撈 created_at >= since 的 log。
+    用來讓「當前」log 的實際內容跟它在 prompt 裡的標籤（近 24 小時）對得上——
+    不給 since 時，筆數不足會悄悄往回吃到更久以前的資料湊滿 limit。
+    since 不給時維持舊行為（不管時間，撈最新的 limit 筆）。
+    """
     with conn.cursor(dictionary=True) as cursor:
-        return fetch_all(
-            cursor,
-            """
+        sql = """
             SELECT log_content, created_at
             FROM ip_risk_logs
             WHERE ip=%s AND log_type=%s
-            ORDER BY created_at DESC
-            LIMIT %s
-            """,
-            (ip, log_type, limit)
-        )
+        """
+        params = [ip, log_type]
+
+        if since is not None:
+            sql += " AND created_at >= %s"
+            params.append(since)
+
+        sql += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+
+        return fetch_all(cursor, sql, tuple(params))
 
 
 # 24h log count
