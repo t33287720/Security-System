@@ -70,13 +70,16 @@ CREATE TABLE IF NOT EXISTS eval_results (
   INDEX idx_ip (ip)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ── LLM violation log ────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS llm_violations (
+-- ── LLM 二次判斷分歧記錄（RETRY/LOW-DATA 兩次判斷不一致時的紀錄）──
+-- outcome=adopted 代表分歧被採信（二次判斷較嚴重），不算違規；
+-- outcome=kept_original 代表二次判斷想降級但被拒絕，才是真的違反 prompt 規則
+CREATE TABLE IF NOT EXISTS llm_discrepancies (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   ip              VARCHAR(45)  NOT NULL,
   branch          VARCHAR(20)  NOT NULL COMMENT 'RETRY 或 LOW-DATA',
   original_level  VARCHAR(20)  NOT NULL,
   attempted_level VARCHAR(20)  NOT NULL,
+  outcome         VARCHAR(20)  NOT NULL DEFAULT 'kept_original' COMMENT 'adopted：採信二次判斷（較嚴重）／kept_original：保留原始判斷',
   created_at      DATETIME     DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_ip (ip),
   INDEX idx_created_at (created_at)

@@ -118,10 +118,10 @@ $(document).ready(function () {
         loadEvalResults();
     });
 
-    // LLM 違規 tab
-    $(document).on('click', '#violationsTab', function (e) {
+    // LLM 判斷分歧 tab
+    $(document).on('click', '#discrepanciesTab', function (e) {
         e.preventDefault();
-        loadViolations();
+        loadDiscrepancies();
     });
 
     // 收合箭頭方向（監聽 Bootstrap collapse 事件）
@@ -1302,40 +1302,46 @@ function initTooltips(container) {
 function fmtPct(v) { return v !== null && v !== undefined ? (v * 100).toFixed(1) + '%' : '—'; }
 function fmtNum(v) { return v !== null && v !== undefined ? parseFloat(v).toFixed(4)      : '—'; }
 
-function loadViolations() {
-    const tbody = document.getElementById('violationsBody');
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center"><div class="spinner-border spinner-border-sm"></div> 載入中...</td></tr>';
+function loadDiscrepancies() {
+    const tbody = document.getElementById('discrepanciesBody');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner-border spinner-border-sm"></div> 載入中...</td></tr>';
 
-    fetch('get_llm_violations.php')
+    fetch('get_llm_discrepancies.php')
         .then(r => r.json())
         .then(data => {
-            if (!data.success) { tbody.innerHTML = '<tr><td colspan="5" class="text-danger p-3">載入失敗</td></tr>'; return; }
+            if (!data.success) { tbody.innerHTML = '<tr><td colspan="6" class="text-danger p-3">載入失敗</td></tr>'; return; }
 
             const s = data.stats;
             document.getElementById('vStatTotal').textContent   = s.total    ?? '0';
             document.getElementById('vStatRetry').textContent   = s.n_retry   ?? '0';
             document.getElementById('vStatLowData').textContent = s.n_low_data ?? '0';
+            document.getElementById('vStatAdopted').textContent = s.n_adopted ?? '0';
 
-            const badge = document.getElementById('violationsCount');
+            const badge = document.getElementById('discrepanciesCount');
             if (s.total > 0) { badge.textContent = s.total; badge.style.display = ''; }
             else { badge.style.display = 'none'; }
 
             const LEVEL_BADGE = { '危險': 'bg-danger', '可疑': 'bg-warning text-dark', '正常': 'bg-success' };
+            const OUTCOME_LABEL = { adopted: '採信二次判斷', kept_original: '保留原判' };
+            const OUTCOME_BADGE = { adopted: 'bg-danger', kept_original: 'bg-secondary' };
             let html = '';
             (data.records || []).forEach(r => {
-                const origBadge = LEVEL_BADGE[r.original_level]  || 'bg-secondary';
+                const origBadge  = LEVEL_BADGE[r.original_level]  || 'bg-secondary';
                 const attemBadge = LEVEL_BADGE[r.attempted_level] || 'bg-secondary';
+                const outcomeBadge = OUTCOME_BADGE[r.outcome] || 'bg-secondary';
+                const outcomeLabel = OUTCOME_LABEL[r.outcome] || r.outcome;
                 html += `<tr class="text-center">
                     <td>${r.ip}</td>
                     <td><span class="badge bg-secondary">${r.branch}</span></td>
                     <td><span class="badge ${origBadge}">${r.original_level}</span></td>
                     <td><span class="badge ${attemBadge}">${r.attempted_level}</span></td>
+                    <td><span class="badge ${outcomeBadge}">${outcomeLabel}</span></td>
                     <td>${r.created_at}</td>
                 </tr>`;
             });
-            tbody.innerHTML = html || '<tr><td colspan="5" class="text-center text-muted">尚無違規紀錄</td></tr>';
+            tbody.innerHTML = html || '<tr><td colspan="6" class="text-center text-muted">尚無分歧紀錄</td></tr>';
         })
-        .catch(() => { tbody.innerHTML = '<tr><td colspan="5" class="text-danger">載入錯誤</td></tr>'; });
+        .catch(() => { tbody.innerHTML = '<tr><td colspan="6" class="text-danger">載入錯誤</td></tr>'; });
 }
 
 function loadEvalResults() {

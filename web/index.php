@@ -414,10 +414,10 @@ require_once __DIR__ . '/config/db_security.php';
                             data-bs-target="#evalPanel" type="button" role="tab">模型評估</button>
                     </li>
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="violationsTab" data-bs-toggle="tab"
-                            data-bs-target="#violationsPanel" type="button" role="tab">
-                            LLM 違規
-                            <span id="violationsCount" class="badge bg-warning text-dark ms-1" style="display:none;font-size:0.65rem;"></span>
+                        <button class="nav-link" id="discrepanciesTab" data-bs-toggle="tab"
+                            data-bs-target="#discrepanciesPanel" type="button" role="tab">
+                            LLM 判斷分歧
+                            <span id="discrepanciesCount" class="badge bg-warning text-dark ms-1" style="display:none;font-size:0.65rem;"></span>
                         </button>
                     </li>
                 </ul>
@@ -577,9 +577,9 @@ require_once __DIR__ . '/config/db_security.php';
 
                     </div>
 
-                    <!-- LLM 違規記錄 -->
-                    <div class="tab-pane fade" id="violationsPanel" role="tabpanel">
-                        <div class="row g-3 mb-3" id="violationsStatCards">
+                    <!-- LLM 判斷分歧記錄 -->
+                    <div class="tab-pane fade" id="discrepanciesPanel" role="tabpanel">
+                        <div class="row g-3 mb-3" id="discrepanciesStatCards">
                             <div class="col-auto">
                                 <div class="card text-center px-4 py-2">
                                     <div style="font-size:0.72rem;color:var(--muted);">總計</div>
@@ -598,19 +598,26 @@ require_once __DIR__ . '/config/db_security.php';
                                     <div style="font-size:1.4rem;font-weight:700;" id="vStatLowData">—</div>
                                 </div>
                             </div>
+                            <div class="col-auto">
+                                <div class="card text-center px-4 py-2">
+                                    <div style="font-size:0.72rem;color:var(--muted);">採信二次判斷</div>
+                                    <div style="font-size:1.4rem;font-weight:700;" id="vStatAdopted">—</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="sys-table-wrap">
-                            <table class="table table-sm table-striped table-bordered align-middle mb-0" id="violationsTable">
+                            <table class="table table-sm table-striped table-bordered align-middle mb-0" id="discrepanciesTable">
                                 <thead class="table-dark text-center">
                                     <tr>
                                         <th>IP</th>
                                         <th>分支</th>
                                         <th>原始等級</th>
                                         <th>嘗試改為</th>
+                                        <th>最後結果</th>
                                         <th>時間</th>
                                     </tr>
                                 </thead>
-                                <tbody id="violationsBody"></tbody>
+                                <tbody id="discrepanciesBody"></tbody>
                             </table>
                         </div>
                     </div>

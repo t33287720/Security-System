@@ -299,14 +299,14 @@ def update_ip_status(conn, ip, now, host_name):
 # CLEANUP
 # =========================================================
 
-def insert_llm_violation(conn, ip, branch, original_level, attempted_level):
+def insert_llm_discrepancy(conn, ip, branch, original_level, attempted_level, outcome):
     with conn.cursor() as cursor:
         cursor.execute(
             """
-            INSERT INTO llm_violations (ip, branch, original_level, attempted_level)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO llm_discrepancies (ip, branch, original_level, attempted_level, outcome)
+            VALUES (%s, %s, %s, %s, %s)
             """,
-            (ip, branch, original_level, attempted_level)
+            (ip, branch, original_level, attempted_level, outcome)
         )
     conn.commit()
 

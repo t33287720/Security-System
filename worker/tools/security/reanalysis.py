@@ -1,6 +1,6 @@
 # tools/security/reanalysis.py
 from datetime import datetime, timedelta
-from tools.db.db_tools import get_ip_logs, insert_llm_violation
+from tools.db.db_tools import get_ip_logs, insert_llm_discrepancy
 from tools.llm.ollama_tools import analyze_message
 
 # danger_level 嚴重程度排序，用於二次判斷（RETRY / LOW-DATA）不一致時的取捨：
@@ -61,9 +61,11 @@ def resolve_low_confidence(conn, ip, analysis, count, total_log, local_ip, direc
         if analysis_ex and analysis_ex.get("danger_level") != analysis.get("danger_level"):
             orig_level = analysis.get("danger_level", "")
             new_level  = analysis_ex.get("danger_level", "")
-            print(f"[RETRY] LLM 違規：danger_level {orig_level} → {new_level}")
-            insert_llm_violation(conn, ip, "RETRY", orig_level, new_level)
-            if DANGER_SEVERITY.get(new_level, -1) > DANGER_SEVERITY.get(orig_level, -1):
+            adopt = DANGER_SEVERITY.get(new_level, -1) > DANGER_SEVERITY.get(orig_level, -1)
+            outcome = "adopted" if adopt else "kept_original"
+            print(f"[RETRY] LLM 判斷分歧：danger_level {orig_level} → {new_level}（{outcome}）")
+            insert_llm_discrepancy(conn, ip, "RETRY", orig_level, new_level, outcome)
+            if adopt:
                 print(f"[RETRY] 二次判斷風險等級較高，採信較嚴重結果 {orig_level} → {new_level}")
                 return analysis_ex, False
             print(f"[RETRY] 二次判斷風險等級較低，保留原始（較嚴重）結果")
@@ -88,9 +90,11 @@ def resolve_low_confidence(conn, ip, analysis, count, total_log, local_ip, direc
     if analysis_ld and analysis_ld.get("danger_level") != analysis.get("danger_level"):
         orig_level = analysis.get("danger_level", "")
         new_level  = analysis_ld.get("danger_level", "")
-        print(f"[LOW-DATA] LLM 違規：danger_level {orig_level} → {new_level}")
-        insert_llm_violation(conn, ip, "LOW-DATA", orig_level, new_level)
-        if DANGER_SEVERITY.get(new_level, -1) > DANGER_SEVERITY.get(orig_level, -1):
+        adopt = DANGER_SEVERITY.get(new_level, -1) > DANGER_SEVERITY.get(orig_level, -1)
+        outcome = "adopted" if adopt else "kept_original"
+        print(f"[LOW-DATA] LLM 判斷分歧：danger_level {orig_level} → {new_level}（{outcome}）")
+        insert_llm_discrepancy(conn, ip, "LOW-DATA", orig_level, new_level, outcome)
+        if adopt:
             print(f"[LOW-DATA] 二次判斷風險等級較高，採信較嚴重結果 {orig_level} → {new_level}，繼續進行封鎖判斷")
             return analysis_ld, False
         print(f"[LOW-DATA] 二次判斷風險等級較低，資料仍不足，延後分析")
