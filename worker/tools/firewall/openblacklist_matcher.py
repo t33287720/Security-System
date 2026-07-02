@@ -2,8 +2,7 @@
 import os
 import ipaddress
 from datetime import datetime, timedelta
-import json
-from tools.db.db_tools import (check_ip_exists, update_ip_risk_status, insert_ip_risk_status,)
+from tools.security.policy import write_ip_risk_status
 
 def load_blacklists(PARSED_DIR):
     BLACKLIST = []
@@ -59,45 +58,22 @@ def handle_blacklist_hit(conn, ip, results, host_name):
         })
         sources.add(source)
 
-    actions_json = [
-        {
-            "analysis_basis": [
-                f"IP {ip} 命中黑名單 CIDR 規則",
-                f"命中來源包含 {', '.join(sources)}"
-            ],
-            "overall_behavior": "IP 位於已知公開惡意黑名單網段中，系統直接依規則判定風險行為。",
-            "danger_level": "危險",
-            "reason": "命中外部威脅情資黑名單（Threat Intelligence Feed）。",
-            "attack_type": "已知惡意IP",
-            "attack_method": "黑名單比對",
-            "blacklist_matches": match_list
-        }
-    ]
-    attack_type = actions_json[0]["attack_type"]
+    action_entry = {
+        "analysis_basis": [
+            f"IP {ip} 命中黑名單 CIDR 規則",
+            f"命中來源包含 {', '.join(sources)}"
+        ],
+        "overall_behavior": "IP 位於已知公開惡意黑名單網段中，系統直接依規則判定風險行為。",
+        "danger_level": "危險",
+        "reason": "命中外部威脅情資黑名單（Threat Intelligence Feed）。",
+        "attack_type": "已知惡意IP",
+        "attack_method": "黑名單比對",
+        "blacklist_matches": match_list
+    }
+    attack_type = action_entry["attack_type"]
     now = datetime.now()
     unblock_time = now + timedelta(hours=24)
 
-    exists = check_ip_exists(conn, ip)
-    if exists:
-        update_ip_risk_status(
-            conn,
-            ip,
-            "黑名單",
-            json.dumps(actions_json, ensure_ascii=False), 
-            attack_type,
-            unblock_time,
-            now
-        )
-    else:
-        insert_ip_risk_status(
-            conn,
-            ip,
-            "黑名單",
-            json.dumps(actions_json, ensure_ascii=False), 
-            attack_type,
-            unblock_time,
-            now,
-            host_name
-        )
+    write_ip_risk_status(conn, ip, "黑名單", action_entry, attack_type, unblock_time, now, host_name)
 
     return True

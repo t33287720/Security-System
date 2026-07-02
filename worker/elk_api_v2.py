@@ -4,12 +4,11 @@ import subprocess
 import sys
 import os
 import random
-import sys
 from datetime import datetime, timedelta
 import urllib3
 import mariadb
 from tools.db.db_tools import (get_ip_log_count_24h, cleanup_blacklist, get_ip_logs, get_known_attacks,
-                               is_new_attack_type, insert_pending_attack, insert_llm_violation,
+                               is_new_attack_type, insert_pending_attack,
                                get_system_setting,)
 from tools.firewall.ipset_tools import (ensure_ipset)
 from tools.es.es_tools import (get_index_range, update_index_if_needed, search_new_logs)
@@ -18,6 +17,7 @@ from tools.llm.ollama_tools import (analyze_message,)
 from tools.logs.log_tools import (format_logs, build_syslog, build_zeeklog, build_weirdlog, build_noticelog, handle_logs)
 from tools.security.security_tools import (expire_warning_ips, is_in_cooldown, build_ip_lists, update_ip_activity, maybe_sync_ipset,)
 from tools.security.policy import (save_analysis_result,)
+from tools.security.reanalysis import (resolve_low_confidence,)
 from tools.system.system_tools import (heartbeat,)
 from config.settings import (ES_HOST, ES_USER, ES_PASS, OLLAMA_URL, POLL_INTERVAL, IPSET_NAME, IPSET_FULL_NAME, IPSET_WHITELIST_NAME, load_hosts, get_my_host_ips, load_config, RAW_DIR, PARSED_DIR, URLS, openblacklist_PARSED_DIR)
 from tools.firewall.openblacklist_loader import (download_blacklists, parse_blacklists)
@@ -29,10 +29,6 @@ EVAL_MODE = True
 EVAL_LOG_THRESHOLD    = 5    # 至少幾筆 log 才執行 eval 分析
 EVAL_COOLDOWN_MIN     = 60   # 同 IP 幾分鐘內不重複 eval
 EVAL_ATTACK_MIN_SRCS  = 2    # attack GT 品質門檻：至少命中幾個獨立 blacklist 來源
-
-# danger_level 嚴重程度排序，用於二次判斷（RETRY / LOW-DATA）不一致時的取捨：
-# 兩次判斷矛盾時採信較嚴重的一方，避免防禦系統因為信任第一次判斷而漏放真正的攻擊
-DANGER_SEVERITY = {"正常": 0, "可疑": 1, "危險": 2}
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -386,100 +382,16 @@ def main():
                 eval_hints=_eval_hints
             )
 
-            # ── confidence 低時診斷並決定是否 retry ──
-            if analysis:
-                confidence = analysis.get("confidence", 1.0)
-                if confidence < 0.7:
-                    cutoff_hist = datetime.now() - timedelta(hours=24)
-
-                    def _build_hist_text(rows_list):
-                        lines = []
-                        for r in rows_list:
-                            if r.get("created_at") and r["created_at"] < cutoff_hist and r.get("log_content"):
-                                ts = r["created_at"].strftime("%Y-%m-%d %H:%M:%S")
-                                lines.append(f"[{ts}] {r['log_content']}")
-                        return "\n".join(lines)
-
-                    if count >= 20:
-                        # DB 有足夠歷史 log，擴大 limit 重分析
-                        print(f"[RETRY] IP={ip} confidence={confidence:.2f}，24h log={count}，擴大 limit 重分析")
-                        all_rows_ex = (
-                            get_ip_logs(conn, ip, "syslog",    limit=50) +
-                            get_ip_logs(conn, ip, "zeeklog",   limit=50) +
-                            get_ip_logs(conn, ip, "weirdlog",  limit=50) +
-                            get_ip_logs(conn, ip, "noticelog", limit=50)
-                        )
-                        hist_text_ex = _build_hist_text(all_rows_ex)
-                        if not hist_text_ex.strip():
-                            print(f"[RETRY] 無歷史資料可補充，保留原始結果")
-                        else:
-                            analysis_ex = analyze_message(
-                                total_log,
-                                ip, data["local_ip"], data["direction"],
-                                known_attacks, OLLAMA_URL,
-                                syslog_list=syslog_texts,
-                                zeek_list=zeek_texts,
-                                eval_hints=_eval_hints,
-                                historical_message=hist_text_ex,
-                            )
-                            if analysis_ex and analysis_ex.get("danger_level") != analysis.get("danger_level"):
-                                orig_level = analysis.get("danger_level", "")
-                                new_level  = analysis_ex.get("danger_level", "")
-                                print(f"[RETRY] LLM 違規：danger_level {orig_level} → {new_level}")
-                                insert_llm_violation(conn, ip, "RETRY", orig_level, new_level)
-                                if DANGER_SEVERITY.get(new_level, -1) > DANGER_SEVERITY.get(orig_level, -1):
-                                    print(f"[RETRY] 二次判斷風險等級較高，採信較嚴重結果 {orig_level} → {new_level}")
-                                    analysis = analysis_ex
-                                else:
-                                    print(f"[RETRY] 二次判斷風險等級較低，保留原始（較嚴重）結果")
-                            elif analysis_ex and analysis_ex.get("confidence", 0) > confidence:
-                                print(f"[RETRY] 信心度提升 {confidence:.2f} → {analysis_ex.get('confidence'):.2f}")
-                                analysis = analysis_ex
-                            else:
-                                print(f"[RETRY] 信心度未改善，保留原始結果")
-                    else:
-                        # 24h 資料不足，從 DB 撈 24h 以前的歷史 log 作為補充參考
-                        all_rows_ld = (
-                            get_ip_logs(conn, ip, "syslog",    limit=50) +
-                            get_ip_logs(conn, ip, "zeeklog",   limit=50) +
-                            get_ip_logs(conn, ip, "weirdlog",  limit=50) +
-                            get_ip_logs(conn, ip, "noticelog", limit=50)
-                        )
-                        hist_text_ld = _build_hist_text(all_rows_ld)
-                        if hist_text_ld.strip():
-                            print(f"[LOW-DATA] IP={ip} confidence={confidence:.2f}，補入歷史 log，重新分析")
-                            analysis_ld = analyze_message(
-                                total_log,
-                                ip,
-                                data["local_ip"],
-                                data["direction"],
-                                known_attacks,
-                                OLLAMA_URL,
-                                syslog_list=syslog_texts,
-                                zeek_list=zeek_texts,
-                                eval_hints=_eval_hints,
-                                historical_message=hist_text_ld,
-                            )
-                            if analysis_ld and analysis_ld.get("danger_level") != analysis.get("danger_level"):
-                                orig_level = analysis.get("danger_level", "")
-                                new_level  = analysis_ld.get("danger_level", "")
-                                print(f"[LOW-DATA] LLM 違規：danger_level {orig_level} → {new_level}")
-                                insert_llm_violation(conn, ip, "LOW-DATA", orig_level, new_level)
-                                if DANGER_SEVERITY.get(new_level, -1) > DANGER_SEVERITY.get(orig_level, -1):
-                                    print(f"[LOW-DATA] 二次判斷風險等級較高，採信較嚴重結果 {orig_level} → {new_level}，繼續進行封鎖判斷")
-                                    analysis = analysis_ld
-                                else:
-                                    print(f"[LOW-DATA] 二次判斷風險等級較低，資料仍不足，延後分析")
-                                    continue
-                            elif analysis_ld and analysis_ld.get("confidence", 0) > confidence:
-                                print(f"[LOW-DATA] 歷史資料提升信心度 {confidence:.2f} → {analysis_ld.get('confidence'):.2f}")
-                                analysis = analysis_ld
-                            else:
-                                print(f"[LOW-DATA] 歷史資料未能提升信心度，延後分析")
-                                continue
-                        else:
-                            print(f"[LOW-DATA] IP={ip} confidence={confidence:.2f}，無歷史資料，延後分析")
-                            continue
+            # ── confidence 低時的二次判斷（RETRY / LOW-DATA），邏輯在 tools/security/reanalysis.py ──
+            if analysis and analysis.get("confidence", 1.0) < 0.7:
+                analysis, skip = resolve_low_confidence(
+                    conn, ip, analysis, count, total_log,
+                    data["local_ip"], data["direction"],
+                    known_attacks, OLLAMA_URL,
+                    syslog_texts, zeek_texts, _eval_hints
+                )
+                if skip:
+                    continue
 
             print("\n==================== AI 分析結果 ====================")
             print(f"IP: {ip}")
