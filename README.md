@@ -219,8 +219,8 @@ sudo ipset create whitelistv4 hash:net maxelem 1000000
 # 順序即生效優先順序，越上面優先權越高）：
 # 1. 白名單一律放行
 # 2. blackfulllistv4（黑名單／高信心度完全封鎖）：全埠無例外擋下
-# 3-4. blacklistv4（LLM黑名單／低信心度暫時封鎖）：保留 80、443 等
-#      常見服務埠放行，避免短暫誤判造成正常服務（如網站、API）中斷
+# 3-4. blacklistv4（LLM黑名單／LLM 判定的高信心危險）：保留 80、443 等
+#      常見服務埠放行，避免 LLM 誤判造成正常服務（如網站、API）中斷
 # 5. blacklistv4 其餘埠一律擋下
 sudo iptables -A INPUT -m set --match-set whitelistv4 src -j ACCEPT
 sudo iptables -A INPUT -m set --match-set blackfulllistv4 src -j DROP
