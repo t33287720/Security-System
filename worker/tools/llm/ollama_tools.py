@@ -244,7 +244,8 @@ attack_type 規則（嚴格執行）：
             OLLAMA_URL,
             json=payload,
             verify=False,
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
+            timeout=(10, 180)
         )
         resp.raise_for_status()
         result = resp.json()

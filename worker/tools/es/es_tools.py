@@ -9,7 +9,7 @@ def get_index_range(days=2):
 def get_existing_indices(requested_indices, ES_HOST, ES_USER, ES_PASS):
     url = f"{ES_HOST}/_cat/indices?h=index"
     try:
-        resp = requests.get(url, auth=(ES_USER, ES_PASS), verify=False)
+        resp = requests.get(url, auth=(ES_USER, ES_PASS), verify=False, timeout=(10, 60))
         resp.raise_for_status()
         indices = resp.text.strip().split('\n')
         return [idx for idx in requested_indices if idx in indices]
@@ -55,7 +55,7 @@ def search_new_logs(ES_HOST, ES_USER, ES_PASS, index_list, last_timestamp):
     }
 
     try:
-        resp = requests.post(url, auth=(ES_USER, ES_PASS), json=query, verify=False)
+        resp = requests.post(url, auth=(ES_USER, ES_PASS), json=query, verify=False, timeout=(10, 60))
         resp.raise_for_status()
         return resp.json().get("hits", {}).get("hits", [])
     except Exception as e:

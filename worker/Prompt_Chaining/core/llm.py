@@ -23,7 +23,7 @@ def call_llm(prompt):
         }
     }
 
-    resp = requests.post(OLLAMA_URL, json=payload)
+    resp = requests.post(OLLAMA_URL, json=payload, timeout=(10, 180))
     result = resp.json()
     text = result.get("response", "")
     return parse_json(text)
