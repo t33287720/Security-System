@@ -47,26 +47,23 @@ def write_ip_risk_status(conn, ip, status, action_entry, attack_type, unblock_ti
 
 def save_analysis_result(conn, ip, analysis_data, host_name):
     level = analysis_data.get("danger_level", "正常")
-    confidence = analysis_data.get("confidence", "0")
+    try:
+        confidence = float(analysis_data.get("confidence", 0) or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
     llm_time = datetime.now()
 
     # -------------------------
     # policy decision（業務邏輯）
     # -------------------------
-    if level == "危險":
+    # 只有「高信心的危險」才封鎖 24h；低信心危險/可疑/正常一律進觀察名單不封鎖
+    if level == "危險" and confidence > 0.8:
         status = "LLM黑名單"
-        if confidence > 0.8:
-            unblock_time = llm_time + timedelta(hours=24)
-        else:
-            unblock_time = llm_time + timedelta(minutes=5)
-
-    elif level == "可疑":
-        status = "觀察名單"
-        unblock_time = None
+        unblock_time = llm_time + timedelta(hours=24)
 
     else:
         status = "觀察名單"
-        unblock_time = None
+        unblock_time = llm_time + timedelta(hours=24)
 
     attack_type = normalize_attack_type(analysis_data.get("attack_type", "未知"))
 

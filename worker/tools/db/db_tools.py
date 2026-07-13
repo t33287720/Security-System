@@ -299,9 +299,13 @@ def update_ip_status(conn, ip, now, host_name):
         cursor.execute("""
             UPDATE ip_risk_status_v2
             SET last_time=%s,
-                hostname=%s
+                hostname=%s,
+                unblock_time = CASE
+                    WHEN status = '白名單' THEN unblock_time
+                    ELSE %s + INTERVAL 24 HOUR
+                END
             WHERE ip=%s AND live_status=1
-        """, (now, host_name, ip))
+        """, (now, host_name, now, ip))
     conn.commit()
 
 
@@ -332,7 +336,7 @@ def cleanup_blacklist(conn):
         cursor.execute("""
             UPDATE ip_risk_status_v2
             SET live_status = 0
-            WHERE status IN ('LLM黑名單', '黑名單')
+            WHERE status <> '白名單'
               AND unblock_time IS NOT NULL
               AND unblock_time < NOW()
               AND live_status = 1
